@@ -105,6 +105,13 @@
             android:label="@string/application_crashed"
             android:launchMode="singleTask" />
         <activity
+            android:name=".ModuleDisconnectedActivity"
+            android:configChanges="uiMode"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/module_connection_required_title"
+            android:noHistory="true" />
+        <activity
             android:name=".ProfilesActivity"
             android:configChanges="uiMode"
             android:exported="false"

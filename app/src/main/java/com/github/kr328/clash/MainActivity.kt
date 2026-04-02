@@ -12,6 +12,7 @@ import com.github.kr328.clash.common.util.intent
 import com.github.kr328.clash.common.util.ticker
 import com.github.kr328.clash.design.MainDesign
 import com.github.kr328.clash.design.ui.ToastDuration
+import com.github.kr328.clash.util.ModuleConnection
 import com.github.kr328.clash.util.startClashService
 import com.github.kr328.clash.util.stopClashService
 import com.github.kr328.clash.util.withClash
@@ -26,6 +27,12 @@ import com.github.kr328.clash.design.R
 
 class MainActivity : BaseActivity<MainDesign>() {
     override suspend fun main() {
+        if (!ModuleConnection.isAvailable()) {
+            startActivity(ModuleDisconnectedActivity::class.intent)
+            finish()
+            return
+        }
+
         val design = MainDesign(this)
 
         setContentDesign(design)
