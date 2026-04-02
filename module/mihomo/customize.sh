@@ -18,11 +18,17 @@ LOG="$RUNDIR/mihomo.log"
 ensure_cmfa_controller() {
   [ -f "$CFG" ] || return 1
 
+  start_count=$(grep -c '^# ===== cmfa managed block =====$' "$CFG")
+  end_count=$(grep -c '^# ===== end cmfa managed block =====$' "$CFG")
+  if [ "$start_count" -ne "$end_count" ] || [ "$start_count" -gt 1 ]; then
+    return 1
+  fi
+
   secret=""
   if [ -f "$SECRET_FILE" ]; then
     secret=$(cat "$SECRET_FILE")
   fi
-  secret_escaped=$(printf '%s' "$secret" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  secret_escaped=$(printf '%s' "$secret" | tr -d '\r\n' | sed "s/'/''/g")
 
   tmp="$RUNDIR/config.tmp.$$"
   awk '
@@ -38,7 +44,7 @@ ensure_cmfa_controller() {
 external-controller: "127.0.0.1:16756"
 external-controller-tls: ""
 external-ui: ""
-secret: "$secret_escaped"
+secret: '$secret_escaped'
 # ===== end cmfa managed block =====
 EOF2
 
