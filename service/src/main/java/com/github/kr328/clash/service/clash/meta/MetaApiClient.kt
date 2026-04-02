@@ -16,11 +16,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import java.net.Proxy
 import java.net.URLEncoder
 import java.util.Date
 
 internal object MetaApiClient {
-    private val http = OkHttpClient()
+    private val http = OkHttpClient.Builder()
+        .proxy(Proxy.NO_PROXY)
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val plain = "application/json; charset=utf-8".toMediaType()
 

@@ -1,51 +1,51 @@
 package com.github.kr328.clash.util
 
+import android.net.LocalSocket
+import android.net.LocalSocketAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.TimeUnit
+import java.net.InetSocketAddress
+import java.net.Socket
 
 object ModuleConnection {
-    private const val MODULE_BIN_PATH = "/data/adb/modules/mihomo/bin/mihomo-android"
-    private const val RUNTIME_DIR_PATH = "/data/adb/mihomo-cmfa"
-    private const val CONTROLLER_URL = "http://127.0.0.1:16756/version"
+    private const val CONTROLLER_HOST    = "127.0.0.1"
+    private const val CONTROLLER_PORT    = 16756
+    private const val CONNECT_TIMEOUT_MS = 3000
+    // Abstract Unix socket relay created by the Zygisk companion (matches RELAY_ABSTRACT in main.cpp)
+    private const val RELAY_ABSTRACT_NAME = "mihomo_cmfa_relay"
 
     suspend fun isAvailable(): Boolean = withContext(Dispatchers.IO) {
-        canReachController()
+        canReachControllerTCP() || canReachControllerRelay()
     }
 
-    private fun hasModuleRuntime(): Boolean {
+    /**
+     * Raw TCP socket check.
+     * Unlike HttpURLConnection/OkHttp, a plain Socket does NOT honour system HTTP-proxy
+     * settings, so it succeeds even when a system proxy is configured.
+     */
+    private fun canReachControllerTCP(): Boolean {
         return runCatching {
-            val process = ProcessBuilder(
-                "su", "-c",
-                "[ -x '$MODULE_BIN_PATH' ] && [ -d '$RUNTIME_DIR_PATH' ]"
-            ).start()
-
-            val finished = process.waitFor(2, TimeUnit.SECONDS)
-            if (!finished) {
-                process.destroyForcibly()
-                false
-            } else {
-                process.exitValue() == 0
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(CONTROLLER_HOST, CONTROLLER_PORT), CONNECT_TIMEOUT_MS)
+                true
             }
         }.getOrDefault(false)
     }
 
-    private fun canReachController(): Boolean {
+    /**
+     * Unix socket fallback via the Zygisk companion relay.
+     * The Zygisk module creates an abstract Unix socket (@mihomo_cmfa_relay) that
+     * forwards connections to the mihomo external-controller.  Connecting here
+     * bypasses Android's networking stack entirely, so it works even if direct TCP
+     * from the app process is blocked by SELinux or other restrictions.
+     */
+    private fun canReachControllerRelay(): Boolean {
         return runCatching {
-            val conn: HttpURLConnection = (URL(CONTROLLER_URL).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 3000
-                readTimeout = 3000
-                requestMethod = "GET"
-                instanceFollowRedirects = false
-            }
-
-            try {
-                val code = conn.responseCode
-                code in 200..499
-            } finally {
-                conn.disconnect()
+            LocalSocket().use { socket ->
+                socket.connect(
+                    LocalSocketAddress(RELAY_ABSTRACT_NAME, LocalSocketAddress.Namespace.ABSTRACT)
+                )
+                true
             }
         }.getOrDefault(false)
     }

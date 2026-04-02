@@ -68,6 +68,26 @@ jobs:
         if: success()
         run: ./gradlew --no-daemon app:assembleAlphaRelease
 
+      - name: Build Zygisk module
+        run: |
+          NDK_VERSION=27.0.12077973
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;$NDK_VERSION" --channel=0 || true
+          NDK="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+          TOOLCHAIN="$NDK/build/cmake/android.toolchain.cmake"
+          SRC="$GITHUB_WORKSPACE/module/mihomo/zygisk"
+          for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
+            cmake \
+              -DANDROID_ABI="$ABI" \
+              -DANDROID_PLATFORM=android-21 \
+              -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -B "$GITHUB_WORKSPACE/zygisk_build_$ABI" \
+              "$SRC"
+            cmake --build "$GITHUB_WORKSPACE/zygisk_build_$ABI"
+            cp "$GITHUB_WORKSPACE/zygisk_build_$ABI/libmihomo_zygisk.so" \
+               "$SRC/$ABI.so"
+          done
+
       - name: Package Magisk Module
         run: |
           STAGE=$(mktemp -d)
