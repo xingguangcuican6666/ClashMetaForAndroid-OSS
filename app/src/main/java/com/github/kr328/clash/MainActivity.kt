@@ -86,6 +86,15 @@ class MainActivity : BaseActivity<MainDesign>() {
     private suspend fun MainDesign.fetch() {
         setClashRunning(clashRunning)
 
+        if (!clashRunning) {
+            setMode(null)
+            setHasProviders(false)
+            withProfile {
+                setProfileName(queryActive()?.name)
+            }
+            return
+        }
+
         val state = withClash {
             queryTunnelState()
         }
