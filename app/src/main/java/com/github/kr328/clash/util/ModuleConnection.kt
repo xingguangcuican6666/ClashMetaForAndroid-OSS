@@ -35,8 +35,8 @@ object ModuleConnection {
     private fun canReachController(): Boolean {
         return runCatching {
             val conn = (URL(CONTROLLER_URL).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 1200
-                readTimeout = 1200
+                connectTimeout = 3000
+                readTimeout = 3000
                 requestMethod = "GET"
                 instanceFollowRedirects = false
             }
