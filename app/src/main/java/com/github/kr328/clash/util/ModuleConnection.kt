@@ -34,16 +34,18 @@ object ModuleConnection {
 
     private fun canReachController(): Boolean {
         return runCatching {
-            val conn = (URL(CONTROLLER_URL).openConnection() as HttpURLConnection).apply {
+            val conn: HttpURLConnection = (URL(CONTROLLER_URL).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 3000
                 readTimeout = 3000
                 requestMethod = "GET"
                 instanceFollowRedirects = false
             }
 
-            conn.use {
+            try {
                 val code = conn.responseCode
                 code in 200..499
+            } finally {
+                conn.disconnect()
             }
         }.getOrDefault(false)
     }
