@@ -4,6 +4,8 @@ import android.content.Context
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.core.Clash
 import com.github.kr328.clash.core.model.*
+import com.github.kr328.clash.service.clash.meta.MetaConfigPatcher
+import com.github.kr328.clash.service.clash.meta.MetaState
 import com.github.kr328.clash.service.data.Selection
 import com.github.kr328.clash.service.data.SelectionDao
 import com.github.kr328.clash.service.remote.IClashManager
@@ -19,35 +21,38 @@ class ClashManager(private val context: Context) : IClashManager,
     private var logReceiver: ReceiveChannel<LogMessage>? = null
 
     override fun queryTunnelState(): TunnelState {
-        return Clash.queryTunnelState()
+        MetaState.refreshSnapshot()
+        return MetaState.queryTunnelState()
     }
 
     override fun queryTrafficTotal(): Long {
-        return Clash.queryTrafficTotal()
+        MetaState.refreshSnapshot()
+        return MetaState.queryTrafficTotal()
     }
 
     override fun queryProxyGroupNames(excludeNotSelectable: Boolean): List<String> {
-        return Clash.queryGroupNames(excludeNotSelectable)
+        return MetaState.queryGroupNames(excludeNotSelectable)
     }
 
     override fun queryProxyGroup(name: String, proxySort: ProxySort): ProxyGroup {
-        return Clash.queryGroup(name, proxySort)
+        return MetaState.queryGroup(name, proxySort)
     }
 
     override fun queryConfiguration(): UiConfiguration {
-        return Clash.queryConfiguration()
+        return UiConfiguration()
     }
 
     override fun queryProviders(): ProviderList {
-        return ProviderList(Clash.queryProviders())
+        MetaState.refreshSnapshot()
+        return MetaState.queryProviders()
     }
 
     override fun queryOverride(slot: Clash.OverrideSlot): ConfigurationOverride {
-        return Clash.queryOverride(slot)
+        return MetaConfigPatcher.readOverride(slot, store)
     }
 
     override fun patchSelector(group: String, name: String): Boolean {
-        return Clash.patchSelector(group, name).also {
+        return MetaState.patchSelector(group, name).also {
             val current = store.activeProfile ?: return@also
 
             if (it) {
@@ -59,33 +64,36 @@ class ClashManager(private val context: Context) : IClashManager,
     }
 
     override fun patchOverride(slot: Clash.OverrideSlot, configuration: ConfigurationOverride) {
-        Clash.patchOverride(slot, configuration)
+        MetaConfigPatcher.persistOverride(slot, configuration, store)
+        if (slot == Clash.OverrideSlot.Session) {
+            MetaState.setMode(configuration.mode)
+            MetaState.setLogLevel(configuration.logLevel)
+        }
 
         context.sendOverrideChanged()
     }
 
     override fun clearOverride(slot: Clash.OverrideSlot) {
-        Clash.clearOverride(slot)
+        MetaConfigPatcher.clearOverride(slot, store)
+        context.sendOverrideChanged()
     }
 
     override suspend fun healthCheck(group: String) {
-        return Clash.healthCheck(group).await()
+        return MetaState.healthCheck(group)
     }
 
     override suspend fun updateProvider(type: Provider.Type, name: String) {
-        return Clash.updateProvider(type, name).await()
+        return MetaState.updateProvider(type, name)
     }
 
     override fun setLogObserver(observer: ILogObserver?) {
         synchronized(this) {
             logReceiver?.apply {
                 cancel()
-
-                Clash.forceGc()
             }
 
             if (observer != null) {
-                logReceiver = Clash.subscribeLogcat().also { c ->
+                logReceiver = MetaState.openLogStream().also { c ->
                     launch {
                         try {
                             while (isActive) {
@@ -99,12 +107,13 @@ class ClashManager(private val context: Context) : IClashManager,
                         } finally {
                             withContext(NonCancellable) {
                                 c.cancel()
-
-                                Clash.forceGc()
+                                MetaState.closeLogStream()
                             }
                         }
                     }
                 }
+            } else {
+                MetaState.closeLogStream()
             }
         }
     }

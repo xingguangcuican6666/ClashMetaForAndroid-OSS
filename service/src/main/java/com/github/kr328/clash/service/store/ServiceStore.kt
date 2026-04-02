@@ -65,4 +65,14 @@ class ServiceStore(context: Context) {
         key = "dynamic_notification",
         defaultValue = true
     )
+
+    var persistOverrideJson by store.string(
+        key = "persist_override_json",
+        defaultValue = "{}"
+    )
+
+    var sessionOverrideJson by store.string(
+        key = "session_override_json",
+        defaultValue = "{}"
+    )
 }

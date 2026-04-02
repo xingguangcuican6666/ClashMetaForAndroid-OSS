@@ -2,7 +2,6 @@ package com.github.kr328.clash.service.clash.module
 
 import android.app.Service
 import android.content.Intent
-import com.github.kr328.clash.core.Clash
 import java.util.*
 
 class TimeZoneModule(service: Service) : Module<Unit>(service) {
@@ -12,9 +11,7 @@ class TimeZoneModule(service: Service) : Module<Unit>(service) {
         }
 
         while (true) {
-            val timeZone = TimeZone.getDefault()
-
-            Clash.notifyTimeZoneChanged(timeZone.id, timeZone.rawOffset / 1000)
+            TimeZone.getDefault()
 
             timeZones.receive()
         }

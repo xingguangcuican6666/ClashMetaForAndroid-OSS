@@ -3,18 +3,17 @@ package com.github.kr328.clash.service
 import android.annotation.TargetApi
 import android.app.PendingIntent
 import android.content.Intent
-import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
 import com.github.kr328.clash.common.compat.pendingIntentFlags
 import com.github.kr328.clash.common.constants.Components
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.service.clash.clashRuntime
+import com.github.kr328.clash.service.clash.meta.MetaKernelController
 import com.github.kr328.clash.service.clash.module.*
 import com.github.kr328.clash.service.model.AccessControlMode
 import com.github.kr328.clash.service.store.ServiceStore
 import com.github.kr328.clash.service.util.cancelAndJoinBlocking
-import com.github.kr328.clash.service.util.parseCIDR
 import com.github.kr328.clash.service.util.sendClashStarted
 import com.github.kr328.clash.service.util.sendClashStopped
 import kotlinx.coroutines.*
@@ -30,8 +29,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
         val store = ServiceStore(self)
 
         val close = install(CloseModule(self))
-        val tun = install(TunModule(self))
-        val config = install(ConfigurationModule(self))
+        val config = install(MetaRuntimeModule(self, useTun = true))
         val network = install(NetworkObserveModule(self))
 
         if (store.dynamicNotification)
@@ -44,7 +42,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
         install(SuspendModule(self))
 
         try {
-            tun.open()
+            openVpn()
 
             while (isActive) {
                 val quit = select<Boolean> {
@@ -73,8 +71,6 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
             reason = e.message
         } finally {
             withContext(NonCancellable) {
-                tun.close()
-
                 stopSelf()
             }
         }
@@ -101,7 +97,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
     }
 
     override fun onDestroy() {
-        TunModule.requestStop()
+        MetaKernelController.stop()
 
         StatusProvider.serviceRunning = false
 
@@ -120,10 +116,10 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
         runtime.requestGc()
     }
 
-    private fun TunModule.open() {
+    private fun openVpn() {
         val store = ServiceStore(self)
 
-        val device = with(Builder()) {
+        with(Builder()) {
             // Interface address
             addAddress(TUN_GATEWAY, TUN_SUBNET_PREFIX)
             if (store.allowIpv6) {
@@ -132,12 +128,12 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
 
             // Route
             if (store.bypassPrivateNetwork) {
-                resources.getStringArray(R.array.bypass_private_route).map(::parseCIDR).forEach {
-                    addRoute(it.ip, it.prefix)
+                resources.getStringArray(R.array.bypass_private_route).forEach {
+                    addRouteFromCidr(it)
                 }
                 if (store.allowIpv6) {
-                    resources.getStringArray(R.array.bypass_private_route6).map(::parseCIDR).forEach {
-                        addRoute(it.ip, it.prefix)
+                    resources.getStringArray(R.array.bypass_private_route6).forEach {
+                        addRouteFromCidr(it)
                     }
                 }
 
@@ -168,9 +164,6 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
                 }
             }
 
-            // Blocking
-            setBlocking(false)
-
             // Mtu
             setMtu(TUN_MTU)
 
@@ -198,34 +191,17 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
                 setMetered(false)
             }
 
-            // System Proxy
-            if (Build.VERSION.SDK_INT >= 29 && store.systemProxy) {
-                listenHttp()?.let {
-                    setHttpProxy(
-                        ProxyInfo.buildDirectProxy(
-                            it.address.hostAddress,
-                            it.port,
-                            HTTP_PROXY_BLACK_LIST + if (store.bypassPrivateNetwork) HTTP_PROXY_LOCAL_LIST else emptyList()
-                        )
-                    )
-                }
-            }
-
             if (store.allowBypass) {
                 allowBypass()
             }
-
-            TunModule.TunDevice(
-                fd = establish()?.detachFd()
-                    ?: throw NullPointerException("Establish VPN rejected by system"),
-                stack = store.tunStackMode,
-                gateway = "$TUN_GATEWAY/$TUN_SUBNET_PREFIX" + if (store.allowIpv6) ",$TUN_GATEWAY6/$TUN_SUBNET_PREFIX6" else "",
-                portal = TUN_PORTAL + if (store.allowIpv6) ",$TUN_PORTAL6" else "",
-                dns = if (store.dnsHijacking) NET_ANY else (TUN_DNS + if (store.allowIpv6) ",$TUN_DNS6" else ""),
-            )
         }
+            .establish()
+            ?: throw NullPointerException("Establish VPN rejected by system")
+    }
 
-        attach(device)
+    private fun Builder.addRouteFromCidr(cidr: String) {
+        val split = cidr.split("/", limit = 2)
+        addRoute(split[0], split[1].toInt())
     }
 
     companion object {
@@ -241,26 +217,5 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
         private const val NET_ANY = "0.0.0.0"
         private const val NET_ANY6 = "::"
 
-        private val HTTP_PROXY_LOCAL_LIST: List<String> = listOf(
-            "localhost",
-            "*.local",
-            "127.*",
-            "10.*",
-            "172.16.*",
-            "172.17.*",
-            "172.18.*",
-            "172.19.*",
-            "172.2*",
-            "172.30.*",
-            "172.31.*",
-            "192.168.*"
-        )
-        private val HTTP_PROXY_BLACK_LIST: List<String> = listOf(
-            "*zhihu.com",
-            "*zhimg.com",
-            "*jd.com",
-            "100ime-iat-api.xfyun.cn",
-            "*360buyimg.com",
-        )
     }
 }
