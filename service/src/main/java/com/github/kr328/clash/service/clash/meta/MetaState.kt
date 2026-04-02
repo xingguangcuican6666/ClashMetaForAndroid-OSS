@@ -65,9 +65,9 @@ internal object MetaState {
         val channel = Channel<LogMessage>(128)
         closeLogStream()
         logChannel = channel
-        logSocket = MetaApiClient.connectLogStream { msg ->
+        logSocket = MetaApiClient.connectLogStream(onLog = { msg ->
             channel.trySend(msg)
-        }
+        })
         return channel
     }
 

@@ -27,8 +27,8 @@ internal object MetaKernelController {
             """
             if [ -f ${MetaPaths.PID_PATH} ]; then
               old_pid=$(cat ${MetaPaths.PID_PATH})
-              if kill -0 "$old_pid" 2>/dev/null; then
-                kill "$old_pid"
+              if kill -0 "${'$'}old_pid" 2>/dev/null; then
+                kill "${'$'}old_pid"
               fi
             fi
             """.trimIndent(),

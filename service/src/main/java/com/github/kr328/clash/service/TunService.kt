@@ -119,7 +119,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
     private fun openVpn() {
         val store = ServiceStore(self)
 
-        with(Builder()) {
+        val builder = Builder().apply {
             // Interface address
             addAddress(TUN_GATEWAY, TUN_SUBNET_PREFIX)
             if (store.allowIpv6) {
@@ -195,7 +195,8 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
                 allowBypass()
             }
         }
-            .establish()
+
+        builder.establish()
             ?: throw IllegalStateException("Establish VPN rejected by system: verify VPN permission is granted and no conflicting VPN is active")
     }
 
