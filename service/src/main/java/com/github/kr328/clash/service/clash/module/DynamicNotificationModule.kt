@@ -12,11 +12,11 @@ import com.github.kr328.clash.common.compat.pendingIntentFlags
 import com.github.kr328.clash.common.constants.Components
 import com.github.kr328.clash.common.constants.Intents
 import com.github.kr328.clash.common.util.ticker
-import com.github.kr328.clash.core.Clash
 import com.github.kr328.clash.core.util.trafficDownload
 import com.github.kr328.clash.core.util.trafficUpload
 import com.github.kr328.clash.service.R
 import com.github.kr328.clash.service.StatusProvider
+import com.github.kr328.clash.service.clash.meta.MetaState
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.selects.select
@@ -44,8 +44,9 @@ class DynamicNotificationModule(service: Service) : Module<Unit>(service) {
     private val notificationManager = NotificationManagerCompat.from(service)
 
     private fun update() {
-        val now = Clash.queryTrafficNow()
-        val total = Clash.queryTrafficTotal()
+        MetaState.refreshSnapshot()
+        val now = MetaState.queryTrafficNow()
+        val total = MetaState.queryTrafficTotal()
 
         val uploading = now.trafficUpload()
         val downloading = now.trafficDownload()

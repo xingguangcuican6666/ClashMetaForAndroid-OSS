@@ -5,7 +5,6 @@ import android.net.*
 import android.os.Build
 import androidx.core.content.getSystemService
 import com.github.kr328.clash.common.log.Log
-import com.github.kr328.clash.core.Clash
 import com.github.kr328.clash.service.util.asSocketAddressText
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -123,7 +122,6 @@ class NetworkObserveModule(service: Service) : Module<Network>(service) {
         if (dnsList.isNotEmpty() && prevDnsList != dnsList) {
             Log.i("notifyDnsChange $prevDnsList -> $dnsList")
             curDnsList = dnsList
-            Clash.notifyDnsChanged(dnsList)
         }
     }
 
@@ -148,7 +146,6 @@ class NetworkObserveModule(service: Service) : Module<Network>(service) {
                 unregister()
 
                 Log.i("NetworkObserve dns = []")
-                Clash.notifyDnsChanged(emptyList())
             }
         }
     }

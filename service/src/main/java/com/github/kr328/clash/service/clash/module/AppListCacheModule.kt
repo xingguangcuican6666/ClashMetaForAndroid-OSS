@@ -4,7 +4,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageInfo
 import com.github.kr328.clash.common.log.Log
-import com.github.kr328.clash.core.Clash
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
@@ -29,8 +28,6 @@ class AppListCacheModule(service: Service) : Module<Unit>(service) {
                     info.applicationInfo!!.uid to info.uniqueUidName()
                 }
             }
-
-        Clash.notifyInstalledAppsChanged(packages)
 
         Log.d("Installed ${packages.size} packages cached")
     }

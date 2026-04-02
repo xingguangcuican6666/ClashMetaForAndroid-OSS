@@ -290,6 +290,12 @@
 
     <string name="invalid_log_file">Invalid log file</string>
     <string name="unable_to_start_vpn">Unable to start VPN component</string>
+    <string name="module_connection_required_title">Module Connection Required</string>
+    <string name="module_connection_required_message">Cannot connect to mihomo module. Please ensure the module is installed and running, then reopen the app.</string>
+    <string name="module_connection_retry">Retry</string>
+    <string name="import_config_to_module">Import Config</string>
+    <string name="import_config_to_module_success">Config imported. Start the module and tap Retry.</string>
+    <string name="import_config_to_module_failed">Failed to import config. Root access may be required.</string>
 
     <string name="version_updated">App Updated</string>
     <string name="version_updated_tips">The settings have been reseted and the old profiles needs to be saved again.</string>

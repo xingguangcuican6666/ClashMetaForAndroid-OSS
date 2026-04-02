@@ -1,7 +1,6 @@
 package com.github.kr328.clash.service.clash
 
 import com.github.kr328.clash.common.log.Log
-import com.github.kr328.clash.core.Clash
 import com.github.kr328.clash.service.clash.module.Module
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -28,9 +27,6 @@ fun CoroutineScope.clashRuntime(block: suspend ClashRuntimeScope.() -> Unit): Cl
                     try {
                         val modules = mutableListOf<Module<*>>()
 
-                        Clash.reset()
-                        Clash.clearOverride(Clash.OverrideSlot.Session)
-
                         val scope = object : ClashRuntimeScope {
                             override fun <E, T : Module<E>> install(module: T): T {
                                 launch {
@@ -48,9 +44,6 @@ fun CoroutineScope.clashRuntime(block: suspend ClashRuntimeScope.() -> Unit): Cl
                         cancel()
                     } finally {
                         withContext(NonCancellable) {
-                            Clash.reset()
-                            Clash.clearOverride(Clash.OverrideSlot.Session)
-
                             Log.d("ClashRuntime: destroyed")
                         }
                     }
@@ -59,7 +52,7 @@ fun CoroutineScope.clashRuntime(block: suspend ClashRuntimeScope.() -> Unit): Cl
         }
 
         override fun requestGc() {
-            Clash.forceGc()
+            Runtime.getRuntime().gc()
         }
     }
 }

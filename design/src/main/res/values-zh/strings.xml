@@ -269,4 +269,7 @@
     <string name="shortcut_start_long">启动 Clash 服务</string>
     <string name="shortcut_stop_short">停止 Clash</string>
     <string name="shortcut_stop_long">停止 Clash 服务</string>
+    <string name="import_config_to_module">导入配置</string>
+    <string name="import_config_to_module_success">配置已导入，请启动模块后点击重试。</string>
+    <string name="import_config_to_module_failed">导入配置失败，请确认已获取 Root 权限。</string>
 </resources>
