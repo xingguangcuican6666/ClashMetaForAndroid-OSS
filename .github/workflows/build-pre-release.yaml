@@ -68,6 +68,16 @@ jobs:
         if: success()
         run: ./gradlew --no-daemon app:assembleAlphaRelease
 
+      - name: Package Magisk Module
+        run: |
+          STAGE=$(mktemp -d)
+          mkdir -p "$STAGE/META-INF/com/google/android"
+          printf '#!/system/bin/sh\nSKIPUNZIP=0\n' > "$STAGE/META-INF/com/google/android/update-binary"
+          printf '#MAGISK\n' > "$STAGE/META-INF/com/google/android/updater-script"
+          cp -r module/mihomo/. "$STAGE/"
+          cd "$STAGE"
+          zip -r "$GITHUB_WORKSPACE/mihomo-magisk-module.zip" .
+
       # Delete old Prerelease-alpha
       - uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
@@ -87,7 +97,9 @@ jobs:
         if: ${{  success() }}
         with:
           tag_name: Prerelease-alpha
-          files: app/build/outputs/apk/alpha/release/*
+          files: |
+            app/build/outputs/apk/alpha/release/*
+            mihomo-magisk-module.zip
           prerelease: true
           generate_release_notes: true
 

@@ -107,6 +107,16 @@ jobs:
         if: success()
         run: ./gradlew --no-daemon app:assembleMetaRelease
 
+      - name: Package Magisk Module
+        run: |
+          STAGE=$(mktemp -d)
+          mkdir -p "$STAGE/META-INF/com/google/android"
+          printf '#!/system/bin/sh\nSKIPUNZIP=0\n' > "$STAGE/META-INF/com/google/android/update-binary"
+          printf '#MAGISK\n' > "$STAGE/META-INF/com/google/android/updater-script"
+          cp -r module/mihomo/. "$STAGE/"
+          cd "$STAGE"
+          zip -r "$GITHUB_WORKSPACE/mihomo-magisk-module.zip" .
+
       - name: Tag Repo
         uses: richardsimko/update-tag@v1
         with:
@@ -119,7 +129,9 @@ jobs:
         if: ${{ success() }}
         with:
           tag_name: ${{ inputs.release-tag }}
-          files: app/build/outputs/apk/meta/release/*
+          files: |
+            app/build/outputs/apk/meta/release/*
+            mihomo-magisk-module.zip
           generate_release_notes: true
 
       - name: Release Changelog Builder

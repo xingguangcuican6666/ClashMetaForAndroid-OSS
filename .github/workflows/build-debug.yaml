@@ -69,7 +69,24 @@ jobs:
       - name: Build
         if: success()
         run: ./gradlew --no-daemon app:assembleAlphaRelease
-          
+
+      - name: Package Magisk Module
+        run: |
+          STAGE=$(mktemp -d)
+          mkdir -p "$STAGE/META-INF/com/google/android"
+          printf '#!/system/bin/sh\nSKIPUNZIP=0\n' > "$STAGE/META-INF/com/google/android/update-binary"
+          printf '#MAGISK\n' > "$STAGE/META-INF/com/google/android/updater-script"
+          cp -r module/mihomo/. "$STAGE/"
+          cd "$STAGE"
+          zip -r "$GITHUB_WORKSPACE/mihomo-magisk-module.zip" .
+
+      - name: Upload Artifact (Magisk Module)
+        uses: actions/upload-artifact@v7
+        if: ${{ success() }}
+        with:
+          name: CMFA Magisk Module
+          path: mihomo-magisk-module.zip
+
       - name: Upload Aritfact (universal)
         uses: actions/upload-artifact@v7
         if: ${{  success() }}
