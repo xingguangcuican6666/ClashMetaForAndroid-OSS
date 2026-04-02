@@ -5,6 +5,16 @@ set_perm_recursive "$MODPATH/bin" 0 0 0755 0755
 
 mkdir -p /data/adb/mihomo-cmfa
 
+if [ ! -f /data/adb/mihomo-cmfa/config.yaml ]; then
+  cat > /data/adb/mihomo-cmfa/config.yaml << 'INITCFG'
+mixed-port: 7890
+allow-lan: false
+mode: direct
+log-level: info
+INITCFG
+  ui_print "- 已创建初始配置文件 config.yaml（请在应用内导入您的配置）"
+fi
+
 cat > "$MODPATH/service.sh" << 'EOF'
 #!/system/bin/sh
 MODDIR=${0%/*}
