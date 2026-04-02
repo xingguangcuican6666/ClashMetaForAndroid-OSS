@@ -12,7 +12,7 @@ object ModuleConnection {
     private const val CONTROLLER_URL = "http://127.0.0.1:16756/version"
 
     suspend fun isAvailable(): Boolean = withContext(Dispatchers.IO) {
-        hasModuleRuntime() && canReachController()
+        canReachController()
     }
 
     private fun hasModuleRuntime(): Boolean {
