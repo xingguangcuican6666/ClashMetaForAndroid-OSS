@@ -71,10 +71,16 @@ start_mihomo() {
     exit 1
   fi
   if [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; then
-    kill "$(cat "$PID")" 2>/dev/null
-    sleep 1
+    old_pid=$(cat "$PID")
+    kill "$old_pid" 2>/dev/null
+    poll_attempts=0
+    while kill -0 "$old_pid" 2>/dev/null && [ "$poll_attempts" -lt 30 ]; do
+      sleep 0.1
+      poll_attempts=$((poll_attempts+1))
+    done
+    rm -f "$PID"
   fi
-  nohup "$BIN" -f "$CFG" > "$LOG" 2>&1 &
+  nohup "$BIN" -d "$RUNDIR" -f "$CFG" > "$LOG" 2>&1 &
   echo $! > "$PID"
 }
 

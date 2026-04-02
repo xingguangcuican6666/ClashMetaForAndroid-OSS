@@ -29,7 +29,13 @@ internal object MetaKernelController {
               old_pid=$(cat ${MetaPaths.PID_PATH})
               if kill -0 "${'$'}old_pid" 2>/dev/null; then
                 kill "${'$'}old_pid"
+                poll_attempts=0
+                while kill -0 "${'$'}old_pid" 2>/dev/null && [ "${'$'}poll_attempts" -lt 30 ]; do
+                  sleep 0.1
+                  poll_attempts=$((poll_attempts+1))
+                done
               fi
+              rm -f ${MetaPaths.PID_PATH}
             fi
             """.trimIndent(),
             10
@@ -40,7 +46,7 @@ internal object MetaKernelController {
 
         val result = RootCmd.run(
             """
-            nohup ${MetaPaths.BIN_PATH} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 &
+            nohup ${MetaPaths.BIN_PATH} -d ${MetaPaths.RUN_DIR} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 &
             echo $! > ${MetaPaths.PID_PATH}
             """.trimIndent(),
             15
