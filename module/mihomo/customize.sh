@@ -11,12 +11,47 @@ MODDIR=${0%/*}
 RUNDIR=/data/adb/mihomo-cmfa
 BIN="$MODDIR/bin/mihomo-android"
 CFG="$RUNDIR/config.yaml"
+SECRET_FILE="$RUNDIR/secret"
 PID="$RUNDIR/mihomo.pid"
 LOG="$RUNDIR/mihomo.log"
+
+ensure_cmfa_controller() {
+  [ -f "$CFG" ] || return 1
+
+  secret=""
+  if [ -f "$SECRET_FILE" ]; then
+    secret=$(cat "$SECRET_FILE")
+  fi
+  secret_escaped=$(printf '%s' "$secret" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+  tmp="$RUNDIR/config.tmp.$$"
+  awk '
+    BEGIN { skip = 0 }
+    /^# ===== cmfa managed block =====$/ { skip = 1; next }
+    /^# ===== end cmfa managed block =====$/ { skip = 0; next }
+    skip == 0 { print }
+  ' "$CFG" > "$tmp" || return 1
+
+  cat >> "$tmp" <<EOF2
+
+# ===== cmfa managed block =====
+external-controller: "127.0.0.1:16756"
+external-controller-tls: ""
+external-ui: ""
+secret: "$secret_escaped"
+# ===== end cmfa managed block =====
+EOF2
+
+  mv "$tmp" "$CFG"
+}
 
 start_mihomo() {
   if [ ! -f "$CFG" ]; then
     echo "[cmfa] config not found: $CFG" >> "$LOG"
+    exit 1
+  fi
+  if ! ensure_cmfa_controller; then
+    echo "[cmfa] failed to inject managed controller block" >> "$LOG"
     exit 1
   fi
   if [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; then
