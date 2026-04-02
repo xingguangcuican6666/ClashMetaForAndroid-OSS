@@ -87,7 +87,6 @@ class MainActivity : BaseActivity<MainDesign>() {
         setClashRunning(clashRunning)
 
         if (!clashRunning) {
-            setMode(null)
             setHasProviders(false)
             withProfile {
                 setProfileName(queryActive()?.name)
