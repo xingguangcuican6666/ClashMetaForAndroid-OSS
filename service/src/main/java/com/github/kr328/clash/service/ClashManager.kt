@@ -39,7 +39,7 @@ class ClashManager(private val context: Context) : IClashManager,
     }
 
     override fun queryConfiguration(): UiConfiguration {
-        return UiConfiguration()
+        return Clash.queryConfiguration()
     }
 
     override fun queryProviders(): ProviderList {
@@ -65,10 +65,7 @@ class ClashManager(private val context: Context) : IClashManager,
 
     override fun patchOverride(slot: Clash.OverrideSlot, configuration: ConfigurationOverride) {
         MetaConfigPatcher.persistOverride(slot, configuration, store)
-        if (slot == Clash.OverrideSlot.Session) {
-            MetaState.setMode(configuration.mode)
-            MetaState.setLogLevel(configuration.logLevel)
-        }
+        applySessionOverride(configuration, slot)
 
         context.sendOverrideChanged()
     }
@@ -116,5 +113,11 @@ class ClashManager(private val context: Context) : IClashManager,
                 MetaState.closeLogStream()
             }
         }
+    }
+
+    private fun applySessionOverride(configuration: ConfigurationOverride, slot: Clash.OverrideSlot) {
+        if (slot != Clash.OverrideSlot.Session) return
+        MetaState.setMode(configuration.mode)
+        MetaState.setLogLevel(configuration.logLevel)
     }
 }

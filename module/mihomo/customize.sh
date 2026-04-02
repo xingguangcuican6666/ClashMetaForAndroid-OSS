@@ -15,7 +15,10 @@ PID="$RUNDIR/mihomo.pid"
 LOG="$RUNDIR/mihomo.log"
 
 start_mihomo() {
-  [ -f "$CFG" ] || exit 0
+  if [ ! -f "$CFG" ]; then
+    echo "[cmfa] config not found: $CFG" >> "$LOG"
+    exit 1
+  fi
   if [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; then
     kill "$(cat "$PID")" 2>/dev/null
     sleep 1

@@ -11,4 +11,3 @@ internal object MetaPaths {
     const val LOG_PATH = "$RUN_DIR/mihomo.log"
     const val EXTERNAL_CONTROLLER = "127.0.0.1:16756"
 }
-

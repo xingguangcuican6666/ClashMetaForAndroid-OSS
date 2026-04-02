@@ -54,7 +54,8 @@ internal object MetaConfigPatcher {
 
     fun writeRuntimeConfig(content: String): Boolean {
         ensureRuntimeDirs()
-        val result = RootCmd.run("cat > ${MetaPaths.CONFIG_PATH} <<'EOF'\n$content\nEOF", 10)
+        val delimiter = "__CMFA_EOF_${System.currentTimeMillis()}__"
+        val result = RootCmd.run("cat > ${MetaPaths.CONFIG_PATH} <<'$delimiter'\n$content\n$delimiter", 10)
         if (result.code != 0) {
             Log.w("Write runtime config failed: ${result.stderr}")
             return false
@@ -65,7 +66,8 @@ internal object MetaConfigPatcher {
     fun writeSecretIfNeeded(secret: String?) {
         ensureRuntimeDirs()
         val s = secret ?: ""
-        RootCmd.run("cat > ${MetaPaths.SECRET_PATH} <<'EOF'\n$s\nEOF", 10)
+        val delimiter = "__CMFA_SECRET_EOF_${System.currentTimeMillis()}__"
+        RootCmd.run("cat > ${MetaPaths.SECRET_PATH} <<'$delimiter'\n$s\n$delimiter", 10)
     }
 
     private fun decodeOverride(content: String): ConfigurationOverride {
@@ -80,10 +82,7 @@ internal object MetaConfigPatcher {
         persist: ConfigurationOverride,
         session: ConfigurationOverride
     ): ConfigurationOverride {
-        val p = overrideJson.decodeFromString(
-            ConfigurationOverride.serializer(),
-            overrideJson.encodeToString(ConfigurationOverride.serializer(), persist)
-        )
+        val p = persist.copy()
         val s = session
         if (s.mode != null) p.mode = s.mode
         if (s.logLevel != null) p.logLevel = s.logLevel

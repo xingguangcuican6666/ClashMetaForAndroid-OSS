@@ -243,6 +243,8 @@ internal object MetaApiClient {
     }
 
     private fun encodeTraffic(up: Long, down: Long): Long {
+        // Use the same 30-bit payload packing expected by core util.Traffic decoder.
+        // We pass raw bytes (scale bits remain zero), preserving legacy display behavior.
         val upPart = ((up.coerceAtLeast(0) and 0x3FFFFFFF) shl 32)
         val downPart = (down.coerceAtLeast(0) and 0x3FFFFFFF)
         return upPart or downPart

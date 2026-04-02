@@ -2,7 +2,6 @@ package com.github.kr328.clash.service.clash.module
 
 import android.app.Service
 import android.content.Intent
-import java.util.*
 
 class TimeZoneModule(service: Service) : Module<Unit>(service) {
     override suspend fun run() {
@@ -11,8 +10,6 @@ class TimeZoneModule(service: Service) : Module<Unit>(service) {
         }
 
         while (true) {
-            TimeZone.getDefault()
-
             timeZones.receive()
         }
     }

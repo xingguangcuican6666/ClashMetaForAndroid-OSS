@@ -78,4 +78,3 @@ internal object MetaState {
         logChannel = null
     }
 }
-

@@ -18,15 +18,33 @@ internal object MetaKernelController {
         val merged = MetaConfigPatcher.readOverride(Clash.OverrideSlot.Session, store)
         MetaConfigPatcher.writeSecretIfNeeded(merged.secret)
 
-        val startCmd = buildString {
-            append("mkdir -p ${MetaPaths.RUN_DIR}; ")
-            append("if [ -f ${MetaPaths.PID_PATH} ] && kill -0 \"$(cat ${MetaPaths.PID_PATH})\" 2>/dev/null; then ")
-            append("kill \"$(cat ${MetaPaths.PID_PATH})\"; sleep 1; ")
-            append("fi; ")
-            append("nohup ${MetaPaths.BIN_PATH} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 & ")
-            append("echo $! > ${MetaPaths.PID_PATH}")
+        val ensure = RootCmd.run("mkdir -p ${MetaPaths.RUN_DIR}", 10)
+        if (ensure.code != 0) {
+            return "Prepare run dir failed"
         }
-        val result = RootCmd.run(startCmd, 15)
+
+        val stopOld = RootCmd.run(
+            """
+            if [ -f ${MetaPaths.PID_PATH} ]; then
+              old_pid=$(cat ${MetaPaths.PID_PATH})
+              if kill -0 "$old_pid" 2>/dev/null; then
+                kill "$old_pid"
+              fi
+            fi
+            """.trimIndent(),
+            10
+        )
+        if (stopOld.code != 0) {
+            Log.w("Stop old mihomo failed: ${stopOld.stderr}")
+        }
+
+        val result = RootCmd.run(
+            """
+            nohup ${MetaPaths.BIN_PATH} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 &
+            echo $! > ${MetaPaths.PID_PATH}
+            """.trimIndent(),
+            15
+        )
         if (result.code != 0) {
             Log.w("Start mihomo failed: ${result.stderr}")
             return "Start mihomo failed: ${result.stderr.ifBlank { "exit ${result.code}" }}"

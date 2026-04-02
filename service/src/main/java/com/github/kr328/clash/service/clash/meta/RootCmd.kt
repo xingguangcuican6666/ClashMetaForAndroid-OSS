@@ -12,6 +12,8 @@ internal data class CmdResult(
 
 internal object RootCmd {
     fun run(command: String, timeoutSeconds: Long = 10): CmdResult {
+        require(!command.contains('\u0000')) { "Invalid command" }
+        require(!command.contains("${'$'}{var@P}")) { "Unsafe shell expansion is not allowed" }
         val process = ProcessBuilder("su", "-c", command)
             .redirectErrorStream(false)
             .start()
@@ -40,4 +42,3 @@ internal object RootCmd {
         return runCatching { readText().trim() }.getOrDefault("")
     }
 }
-

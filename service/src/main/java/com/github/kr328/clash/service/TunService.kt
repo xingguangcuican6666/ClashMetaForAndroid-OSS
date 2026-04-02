@@ -196,7 +196,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
             }
         }
             .establish()
-            ?: throw NullPointerException("Establish VPN rejected by system")
+            ?: throw IllegalStateException("Establish VPN rejected by system: verify VPN permission is granted and no conflicting VPN is active")
     }
 
     private fun Builder.addRouteFromCidr(cidr: String) {
