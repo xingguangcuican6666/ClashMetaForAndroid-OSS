@@ -76,6 +76,16 @@ class ServiceStore(context: Context) {
         defaultValue = "any:53"
     )
 
+    var tunAutoRoute by store.boolean(
+        key = "tun_auto_route",
+        defaultValue = true
+    )
+
+    var tunAutoDetectInterface by store.boolean(
+        key = "tun_auto_detect_interface",
+        defaultValue = true
+    )
+
     var dynamicNotification by store.boolean(
         key = "dynamic_notification",
         defaultValue = true

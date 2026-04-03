@@ -253,6 +253,10 @@
     <string name="tun_strict_route_summary">Use strict routing rules to prevent leaks</string>
     <string name="tun_dns_hijack">DNS Hijack List</string>
     <string name="tun_dns_hijack_summary">Comma-separated addresses (e.g. any:53)</string>
+    <string name="tun_auto_route">Auto Route</string>
+    <string name="tun_auto_route_summary">Automatically add routes to TUN interface</string>
+    <string name="tun_auto_detect_interface">Auto Detect Interface</string>
+    <string name="tun_auto_detect_interface_summary">Automatically detect outbound network interface</string>
 
     <string name="allow_all_apps">Allow all apps</string>
     <string name="allow_selected_apps">Allow selected apps</string>

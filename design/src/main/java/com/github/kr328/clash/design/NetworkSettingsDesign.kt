@@ -134,6 +134,20 @@ class NetworkSettingsDesign(
                 configure = vpnDependencies::add,
             )
 
+            switch(
+                value = srvStore::tunAutoRoute,
+                title = R.string.tun_auto_route,
+                summary = R.string.tun_auto_route_summary,
+                configure = vpnDependencies::add,
+            )
+
+            switch(
+                value = srvStore::tunAutoDetectInterface,
+                title = R.string.tun_auto_detect_interface,
+                summary = R.string.tun_auto_detect_interface_summary,
+                configure = vpnDependencies::add,
+            )
+
             selectableList(
                 value = srvStore::accessControlMode,
                 values = AccessControlMode.values(),

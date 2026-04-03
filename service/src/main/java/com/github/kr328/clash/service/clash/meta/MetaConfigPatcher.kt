@@ -234,8 +234,8 @@ internal object MetaConfigPatcher {
             appendLine("  enable: $useTun")
             appendLine("  stack: ${store.tunStackMode}")
             appendLine("  mtu: ${store.tunMtu}")
-            appendLine("  auto-route: $useTun")
-            appendLine("  auto-detect-interface: $useTun")
+            appendLine("  auto-route: ${store.tunAutoRoute}")
+            appendLine("  auto-detect-interface: ${store.tunAutoDetectInterface}")
             appendLine("  strict-route: ${store.tunStrictRoute}")
             val hijackEntries = store.tunDnsHijackList
                 .split(",")
