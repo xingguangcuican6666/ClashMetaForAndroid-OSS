@@ -6,7 +6,6 @@ import com.github.kr328.clash.core.model.ConfigurationOverride
 import com.github.kr328.clash.service.store.ServiceStore
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
 
 internal object MetaConfigPatcher {
     private val overrideJson = Json {
@@ -14,83 +13,80 @@ internal object MetaConfigPatcher {
         encodeDefaults = false
     }
 
-    fun buildRuntimeConfig(profileDir: File, store: ServiceStore, useTun: Boolean): String {
-        val profileYaml = profileDir.resolve("config.yaml").readText()
-
+    fun buildRuntimeConfig(store: ServiceStore, useTun: Boolean): String {
         val persist = decodeOverride(store.persistOverrideJson)
         val session = decodeOverride(store.sessionOverrideJson)
 
         val merged = mergeOverrides(persist, session)
         val managed = buildManagedBlock(merged, useTun)
 
-        // Try to read the one-time backup of the original module-managed core config.
-        // If it exists, use it as the base (provides TUN / DNS / rules / listeners) and
-        // overlay only the proxies and proxy-groups from the imported profile on top.
-        // This keeps "proxy config" and "core config" strictly separate.
-        // If no backup exists (first boot before the module wrote its own config), fall
-        // back to using the imported profile as the full config — original behaviour.
-        val raw = buildBaseWithProxies(profileYaml)
-
-        return raw.trimEnd() + "\n\n" + managed
-    }
-
-    private fun buildBaseWithProxies(profileYaml: String): String {
+        // Read the module-managed core config.
+        // The app never merges proxy/DNS/rules content from the imported profile into
+        // this config — the imported profile is written to PROFILE_CONFIG_PATH separately
+        // (see MetaKernelController) so the core config can reference it via
+        //   proxy-providers:
+        //     app-imported:
+        //       type: file
+        //       path: ./app-profile.yaml
+        // without any app-side YAML merging.
         val catResult = RootCmd.run("cat ${MetaPaths.BASE_CONFIG_PATH} 2>/dev/null", 10)
-        val baseYaml = if (catResult.code == 0 && catResult.stdout.isNotBlank()) {
+        val coreConfig = if (catResult.code == 0 && catResult.stdout.isNotBlank()) {
             catResult.stdout
         } else {
-            // No base config yet — use the imported profile as-is (backwards compatible).
-            return profileYaml
+            // No core config backup yet — start with the managed block only.
+            // This happens on the very first run before the backup is created.
+            return managed
         }
 
-        val proxiesFromProfile = extractProxyBlocks(profileYaml)
-        if (proxiesFromProfile.isBlank()) {
-            // Profile has no proxies: use the base config unchanged.
-            return baseYaml
-        }
-
-        // Strip any proxies/proxy-groups already in the base config and replace with
-        // those from the imported profile.
-        val baseWithoutProxies = stripProxyBlocks(baseYaml)
-        return baseWithoutProxies.trimEnd() + "\n\n" + proxiesFromProfile
+        // Strip any top-level keys that the managed block will define.
+        // This is the sole cause of the "mapping key already defined" YAML fatal error:
+        // the module's config.yaml already declares external-controller / tun / etc.
+        // and appending the managed block re-declares the same keys.
+        val stripped = stripTopLevelKeys(coreConfig, managedBlockKeys(merged))
+        return stripped.trimEnd() + "\n\n" + managed
     }
 
     /**
-     * Extracts the top-level `proxies:` and `proxy-groups:` YAML blocks from [yaml].
+     * Returns the set of top-level YAML keys that [buildManagedBlock] will emit for
+     * the given [override].  Only keys that will actually appear in the managed block
+     * are included so that optional settings from the core config are preserved when
+     * no app-side override is active.
+     */
+    private fun managedBlockKeys(override: ConfigurationOverride): Set<String> {
+        val keys = mutableSetOf(
+            // Always written by the managed block.
+            "external-controller", "external-controller-tls", "external-ui", "secret", "tun"
+        )
+        // Conditionally written — only strip from the core config if the managed block
+        // will actually set them, so the core config value is preserved otherwise.
+        if (override.mode != null)            keys += "mode"
+        if (override.logLevel != null)        keys += "log-level"
+        if (override.allowLan != null)        keys += "allow-lan"
+        if (override.bindAddress != null)     keys += "bind-address"
+        if (override.unifiedDelay != null)    keys += "unified-delay"
+        if (override.ipv6 != null)            keys += "ipv6"
+        if (override.geodataMode != null)     keys += "geodata-mode"
+        if (override.tcpConcurrent != null)   keys += "tcp-concurrent"
+        if (override.findProcessMode != null) keys += "find-process-mode"
+        return keys
+    }
+
+    /**
+     * Returns [yaml] with every top-level block whose key is in [keys] removed.
      *
-     * Uses a simple line-based parser: a top-level key starts at column 0 (no leading
-     * whitespace) and is not a comment.  Continuation lines are indented (or start with
-     * `-`).  This handles the overwhelming majority of real clash/mihomo subscription
-     * files without requiring a full YAML library.
+     * A top-level block starts at column 0 with a non-comment YAML key.  All
+     * continuation lines (indented lines, list items starting with `-`, blank lines
+     * that belong to the block) are also removed.  The function uses a conservative
+     * line-based approach that handles real-world clash/mihomo configs correctly.
      */
-    private fun extractProxyBlocks(yaml: String): String {
-        val sb = StringBuilder()
-        var collecting = false
-
-        for (line in yaml.lines()) {
-            if (isTopLevelKey(line)) {
-                val key = line.substringBefore(':').trim()
-                collecting = key == "proxies" || key == "proxy-groups"
-            }
-            if (collecting) sb.appendLine(line)
-        }
-
-        return sb.toString().trimEnd()
-    }
-
-    /**
-     * Returns [yaml] with the top-level `proxies:` and `proxy-groups:` blocks removed.
-     * Used to clear existing proxy definitions from the base config before overlaying
-     * fresh ones from the imported profile.
-     */
-    private fun stripProxyBlocks(yaml: String): String {
+    private fun stripTopLevelKeys(yaml: String, keys: Set<String>): String {
         val sb = StringBuilder()
         var skipping = false
 
         for (line in yaml.lines()) {
             if (isTopLevelKey(line)) {
                 val key = line.substringBefore(':').trim()
-                skipping = key == "proxies" || key == "proxy-groups"
+                skipping = key in keys
             }
             if (!skipping) sb.appendLine(line)
         }

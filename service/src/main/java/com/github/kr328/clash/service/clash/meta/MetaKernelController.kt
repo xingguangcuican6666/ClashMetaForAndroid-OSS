@@ -11,16 +11,38 @@ internal object MetaKernelController {
     fun prepareAndStart(context: Context, profileDir: File, useTun: Boolean): String? {
         val store = ServiceStore(context)
 
-        // One-time backup: if the module-managed core config exists but has never been
-        // backed up yet, save it now before we first overwrite it.  Subsequent runs use
-        // this backup as the foundation and only overlay proxies from the imported profile.
+        // One-time backup: save the module-managed core config before we first overwrite
+        // config.yaml.  All subsequent calls use this backup as the read-only source so
+        // that TUN/DNS/rules are never lost regardless of what the imported profile says.
         RootCmd.run(
             "[ ! -f ${MetaPaths.BASE_CONFIG_PATH} ] && [ -f ${MetaPaths.CONFIG_PATH} ] && " +
             "cp ${MetaPaths.CONFIG_PATH} ${MetaPaths.BASE_CONFIG_PATH} || true",
             10
         )
 
-        val runtimeConfig = MetaConfigPatcher.buildRuntimeConfig(profileDir, store, useTun)
+        // Write the imported profile to PROFILE_CONFIG_PATH so the module's core config
+        // can reference it via proxy-providers without any app-side YAML merging:
+        //
+        //   proxy-providers:
+        //     app-imported:
+        //       type: file
+        //       path: ./app-profile.yaml
+        //       health-check: { enable: true, url: "https://www.gstatic.com/generate_204", interval: 300 }
+        //
+        // The app never injects proxy sections into the core config.
+        val profileYaml = runCatching { profileDir.resolve("config.yaml").readText() }.getOrElse { "" }
+        if (profileYaml.isNotBlank()) {
+            val delimiter = "__CMFA_PROFILE_EOF_${System.currentTimeMillis()}__"
+            val writeProfile = RootCmd.run(
+                "cat > ${MetaPaths.PROFILE_CONFIG_PATH} <<'$delimiter'\n$profileYaml\n$delimiter",
+                10
+            )
+            if (writeProfile.code != 0) {
+                Log.w("Write profile config failed: ${writeProfile.stderr}")
+            }
+        }
+
+        val runtimeConfig = MetaConfigPatcher.buildRuntimeConfig(store, useTun)
         if (!MetaConfigPatcher.writeRuntimeConfig(runtimeConfig)) {
             return "Write runtime config failed"
         }

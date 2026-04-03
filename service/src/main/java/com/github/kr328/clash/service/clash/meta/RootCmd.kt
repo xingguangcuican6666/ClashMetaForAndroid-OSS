@@ -27,7 +27,9 @@ internal object RootCmd {
         // drained concurrently and we never deadlock on the pipe buffer.
         Thread {
             runCatching {
-                process.outputStream.bufferedWriter().use { it.write(command) }
+                // A trailing newline is required so the shell treats the input as a
+                // complete command line and begins execution before EOF is reached.
+                process.outputStream.bufferedWriter().use { it.write(command + "\n") }
             }.onFailure {
                 // Log but do not crash: the process may have already exited, which is
                 // a normal race on short commands that produce no stdin.
