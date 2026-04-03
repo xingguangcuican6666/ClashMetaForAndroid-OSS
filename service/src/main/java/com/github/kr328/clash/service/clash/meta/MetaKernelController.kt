@@ -102,10 +102,10 @@ internal object MetaKernelController {
             RootCmd.run(
                 """
                 if [ -f ${MetaPaths.PID_PATH} ]; then
-                  kill "\$(cat ${MetaPaths.PID_PATH})" 2>/dev/null; true
+                  kill "$(cat ${MetaPaths.PID_PATH})" 2>/dev/null; true
                 fi
-                p=\$(pidof mihomo-android 2>/dev/null | awk '{print \$1}')
-                [ -n "\$p" ] && kill "\$p" 2>/dev/null; true
+                p=$(pidof mihomo-android 2>/dev/null | awk '{print $1}')
+                [ -n "${'$'}p" ] && kill "${'$'}p" 2>/dev/null; true
                 sleep 0.3
                 rm -f ${MetaPaths.PID_PATH}
                 """.trimIndent(),
