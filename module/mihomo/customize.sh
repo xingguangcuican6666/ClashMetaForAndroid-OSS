@@ -1,4 +1,4 @@
-ui_print "- 正在初始化 Fish for Android..."
+ui_print "- 正在初始化 mihomo for Android..."
 
 # 设置模块内部文件的权限
 set_perm_recursive "$MODPATH/bin" 0 0 0755 0755
