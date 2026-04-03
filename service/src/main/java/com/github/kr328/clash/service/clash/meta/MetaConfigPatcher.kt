@@ -6,7 +6,6 @@ import com.github.kr328.clash.core.model.ConfigurationOverride
 import com.github.kr328.clash.service.store.ServiceStore
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
 
 internal object MetaConfigPatcher {
     private val overrideJson = Json {
@@ -14,15 +13,123 @@ internal object MetaConfigPatcher {
         encodeDefaults = false
     }
 
-    fun buildRuntimeConfig(profileDir: File, store: ServiceStore, useTun: Boolean): String {
-        val raw = profileDir.resolve("config.yaml").readText()
-
+    fun buildRuntimeConfig(store: ServiceStore, useTun: Boolean): String {
         val persist = decodeOverride(store.persistOverrideJson)
         val session = decodeOverride(store.sessionOverrideJson)
 
         val merged = mergeOverrides(persist, session)
-        val managed = buildManagedBlock(merged, useTun)
-        return raw.trimEnd() + "\n\n" + managed
+        val managed = buildManagedBlock(merged, useTun, store)
+
+        // Prefer the imported subscription profile as the base config: it contains the
+        // user's proxies, proxy-groups, DNS, and rules.  Without this, the user would
+        // see an empty proxy list because BASE_CONFIG_PATH is the module's minimal
+        // default (mixed-port / allow-lan / mode / log-level only).
+        // Fall back to BASE_CONFIG_PATH when no subscription has been imported yet.
+        val profileResult = RootCmd.run("cat ${MetaPaths.PROFILE_CONFIG_PATH} 2>/dev/null", 10)
+        val coreConfig = if (profileResult.code == 0 && profileResult.stdout.isNotBlank()) {
+            profileResult.stdout
+        } else {
+            val catResult = RootCmd.run("cat ${MetaPaths.BASE_CONFIG_PATH} 2>/dev/null", 10)
+            if (catResult.code == 0 && catResult.stdout.isNotBlank()) {
+                catResult.stdout
+            } else {
+                // Neither profile nor base config available yet (very first run).
+                return managed
+            }
+        }
+
+        val withoutBlock = stripManagedBlockRegion(coreConfig)
+        val stripped = stripTopLevelKeys(withoutBlock, managedBlockKeys(merged, useTun))
+        return stripped.trimEnd() + "\n\n" + managed
+    }
+
+    /**
+     * Returns the set of top-level YAML keys that [buildManagedBlock] will emit for
+     * the given [override].  Only keys that will actually appear in the managed block
+     * are included so that optional settings from the core config are preserved when
+     * no app-side override is active.
+     */
+    private fun managedBlockKeys(override: ConfigurationOverride, useTun: Boolean): Set<String> {
+        val keys = mutableSetOf(
+            // Always written by the managed block.
+            "external-controller", "external-controller-tls", "external-ui", "secret", "tun"
+        )
+        // When TUN is enabled the managed block also injects a dns section so we must
+        // strip any dns block that the subscription profile already contains.
+        if (useTun) keys += "dns"
+        // Conditionally written — only strip from the core config if the managed block
+        // will actually set them, so the core config value is preserved otherwise.
+        if (override.mode != null)            keys += "mode"
+        if (override.logLevel != null)        keys += "log-level"
+        if (override.allowLan != null)        keys += "allow-lan"
+        if (override.bindAddress != null)     keys += "bind-address"
+        if (override.unifiedDelay != null)    keys += "unified-delay"
+        if (override.ipv6 != null)            keys += "ipv6"
+        if (override.geodataMode != null)     keys += "geodata-mode"
+        if (override.tcpConcurrent != null)   keys += "tcp-concurrent"
+        if (override.findProcessMode != null) keys += "find-process-mode"
+        return keys
+    }
+
+    /**
+     * Removes the entire `# ===== cmfa managed block =====` … `# ===== end cmfa managed
+     * block =====` region from [yaml], including the marker comment lines themselves and
+     * all lines between them.
+     *
+     * This is necessary because [BASE_CONFIG_PATH] is created by copying config.yaml
+     * AFTER service.sh has already injected its own managed block.  Without this step,
+     * [stripTopLevelKeys] would remove the inner key:value lines but leave the comment
+     * markers behind, causing the final config.yaml to have two managed-block marker
+     * pairs — which makes service.sh's `start_count > 1` guard reject the file.
+     */
+    private fun stripManagedBlockRegion(yaml: String): String {
+        val sb = StringBuilder()
+        var skipping = false
+        for (line in yaml.lines()) {
+            if (line.trimEnd() == "# ===== cmfa managed block =====") {
+                skipping = true
+                continue
+            }
+            if (line.trimEnd() == "# ===== end cmfa managed block =====") {
+                skipping = false
+                continue
+            }
+            if (!skipping) sb.appendLine(line)
+        }
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * Returns [yaml] with every top-level block whose key is in [keys] removed.
+     *
+     * A top-level block starts at column 0 with a non-comment YAML key.  All
+     * continuation lines (indented lines, list items starting with `-`, blank lines
+     * that belong to the block) are also removed.  The function uses a conservative
+     * line-based approach that handles real-world clash/mihomo configs correctly.
+     */
+    private fun stripTopLevelKeys(yaml: String, keys: Set<String>): String {
+        val sb = StringBuilder()
+        var skipping = false
+
+        for (line in yaml.lines()) {
+            if (isTopLevelKey(line)) {
+                val key = line.substringBefore(':').trim()
+                skipping = key in keys
+            }
+            if (!skipping) sb.appendLine(line)
+        }
+
+        return sb.toString().trimEnd()
+    }
+
+    /** True when [line] begins a new top-level YAML key (column 0, not a comment). */
+    private fun isTopLevelKey(line: String): Boolean {
+        if (line.isEmpty() || line[0].isWhitespace() || line[0] == '#') return false
+        val colonIdx = line.indexOf(':')
+        if (colonIdx < 0) return false
+        // If '#' appears before ':', the colon is inside a comment — not a real key.
+        val hashIdx = line.indexOf('#')
+        return hashIdx < 0 || colonIdx < hashIdx
     }
 
     fun persistOverride(slot: Clash.OverrideSlot, configuration: ConfigurationOverride, store: ServiceStore) {
@@ -99,7 +206,7 @@ internal object MetaConfigPatcher {
         return p
     }
 
-    private fun buildManagedBlock(override: ConfigurationOverride, useTun: Boolean): String {
+    private fun buildManagedBlock(override: ConfigurationOverride, useTun: Boolean, store: ServiceStore): String {
         return buildString {
             appendLine("# ===== cmfa managed block =====")
             appendLine("external-controller: \"${MetaPaths.EXTERNAL_CONTROLLER}\"")
@@ -117,8 +224,55 @@ internal object MetaConfigPatcher {
             override.findProcessMode?.let { appendLine("find-process-mode: ${it.name.lowercase()}") }
             appendLine("tun:")
             appendLine("  enable: $useTun")
-            appendLine("  auto-route: false")
-            appendLine("  auto-detect-interface: false")
+            appendLine("  stack: ${store.tunStackMode}")
+            appendLine("  mtu: ${store.tunMtu}")
+            appendLine("  auto-route: ${store.tunAutoRoute}")
+            appendLine("  auto-detect-interface: ${store.tunAutoDetectInterface}")
+            appendLine("  strict-route: ${store.tunStrictRoute}")
+            val excludeInterfaces = store.tunExcludeInterfaces
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (excludeInterfaces.isNotEmpty()) {
+                appendLine("  exclude-interface:")
+                for (iface in excludeInterfaces) {
+                    appendLine("    - $iface")
+                }
+            }
+            val hijackEntries = store.tunDnsHijackList
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (hijackEntries.isNotEmpty()) {
+                appendLine("  dns-hijack:")
+                for (entry in hijackEntries) {
+                    appendLine("    - $entry")
+                }
+            }
+            if (useTun && store.tunDnsEnable) {
+                appendLine("dns:")
+                appendLine("  enable: true")
+                appendLine("  enhanced-mode: ${store.tunDnsMode}")
+                if (store.tunDnsMode == "fake-ip") {
+                    appendLine("  fake-ip-range: ${store.tunDnsFakeIpRange}")
+                    appendLine("  fake-ip-filter:")
+                    appendLine("    - '*.lan'")
+                    appendLine("    - '*.local'")
+                    appendLine("    - 'localhost.ptlogin2.qq.com'")
+                }
+                val nameservers = store.tunDnsNameservers.split(",")
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                if (nameservers.isNotEmpty()) {
+                    appendLine("  nameserver:")
+                    for (ns in nameservers) appendLine("    - $ns")
+                }
+                val fallback = store.tunDnsFallback.split(",")
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                if (fallback.isNotEmpty()) {
+                    appendLine("  fallback:")
+                    for (fb in fallback) appendLine("    - $fb")
+                }
+            }
             appendLine("# ===== end cmfa managed block =====")
         }
     }

@@ -28,6 +28,16 @@ interface NullableTextAdapter<T> {
                 return text
             }
         }
+
+        val NonNullString = object : NullableTextAdapter<String> {
+            override fun from(value: String): String? = value.ifEmpty { null }
+            override fun to(text: String?): String = text?.trim() ?: ""
+        }
+
+        val TunMtu = object : NullableTextAdapter<Int> {
+            override fun from(value: Int): String? = if (value > 0) value.toString() else null
+            override fun to(text: String?): Int = text?.toIntOrNull()?.takeIf { it > 0 } ?: 9000
+        }
     }
 }
 

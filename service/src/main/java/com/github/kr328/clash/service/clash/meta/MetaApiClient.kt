@@ -18,9 +18,15 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import java.net.URLEncoder
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 internal object MetaApiClient {
-    private val http = OkHttpClient()
+    private val http = OkHttpClient.Builder()
+        .proxy(java.net.Proxy.NO_PROXY)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val plain = "application/json; charset=utf-8".toMediaType()
 
@@ -40,8 +46,16 @@ internal object MetaApiClient {
     }
 
     fun queryTrafficNow(): Traffic {
-        val t = get<TrafficResp>("/traffic")
-        return encodeTraffic(t.up, t.down)
+        // /traffic is a streaming newline-delimited JSON endpoint in mihomo.
+        // Using resp.body?.string() waits for the stream to close (never), blocking forever.
+        // Read only the first line (one traffic sample) and close immediately.
+        val req = Request.Builder().url(api("/traffic")).get().build()
+        http.newCall(req).execute().use { resp ->
+            val line = resp.body?.source()?.readUtf8Line().orEmpty()
+            val t = runCatching { json.decodeFromString(TrafficResp.serializer(), line) }
+                .getOrElse { TrafficResp() }
+            return encodeTraffic(t.up, t.down)
+        }
     }
 
     fun queryTrafficTotal(): Traffic {
@@ -52,16 +66,17 @@ internal object MetaApiClient {
         val all = get<ProxiesResp>("/proxies").proxies
         return all.entries
             .filter { it.key != "GLOBAL" }
+            .filter { isGroupType(it.value.type) }
             .filter {
                 if (!excludeNotSelectable) true
-                else isGroupType(it.value.type)
+                else it.value.type.lowercase() == "selector"
             }
             .map { it.key }
             .sorted()
     }
 
     fun queryGroup(name: String, sort: ProxySort): ProxyGroup {
-        val encodedName = URLEncoder.encode(name, "UTF-8")
+        val encodedName = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
         val group = get<ProxyResp>("/proxies/$encodedName")
         val all = get<ProxiesResp>("/proxies").proxies
 
@@ -90,7 +105,7 @@ internal object MetaApiClient {
     }
 
     fun patchSelector(group: String, selected: String): Boolean {
-        val encodedName = URLEncoder.encode(group, "UTF-8")
+        val encodedName = URLEncoder.encode(group, "UTF-8").replace("+", "%20")
         val body = """{"name":"${escapeJson(selected)}"}"""
         val req = Request.Builder()
             .url(api("/proxies/$encodedName"))
@@ -100,7 +115,7 @@ internal object MetaApiClient {
     }
 
     fun healthCheck(group: String) {
-        val encodedName = URLEncoder.encode(group, "UTF-8")
+        val encodedName = URLEncoder.encode(group, "UTF-8").replace("+", "%20")
         val req = Request.Builder()
             .url(api("/proxies/$encodedName/healthcheck?url=https://www.gstatic.com/generate_204"))
             .get()
@@ -141,7 +156,7 @@ internal object MetaApiClient {
 
     fun updateProvider(type: Provider.Type, name: String) {
         val path = if (type == Provider.Type.Proxy) "/providers/proxies/" else "/providers/rules/"
-        val encodedName = URLEncoder.encode(name, "UTF-8")
+        val encodedName = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
         val req = Request.Builder()
             .url(api("$path$encodedName"))
             .put("{}".toRequestBody(plain))

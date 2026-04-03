@@ -17,10 +17,16 @@ import com.github.kr328.clash.util.startClashService
 import com.github.kr328.clash.util.stopClashService
 import com.github.kr328.clash.util.withClash
 import com.github.kr328.clash.util.withProfile
+import com.github.kr328.clash.service.StatusProvider
+import com.github.kr328.clash.common.compat.startForegroundServiceCompat
+import com.github.kr328.clash.service.ClashService
 import com.github.kr328.clash.core.bridge.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import com.github.kr328.clash.design.R
@@ -33,6 +39,17 @@ class MainActivity : BaseActivity<MainDesign>() {
             return
         }
 
+        // Auto-start: if the user previously started the service (shouldStartClashOnBoot)
+        // but it isn't currently managing mihomo (clashRunning = false, which happens when
+        // the module's service.sh started mihomo at boot before ClashService was running),
+        // silently take over management.  Because prepareAndStart now sends SIGHUP instead
+        // of killing mihomo, this is non-disruptive to existing connections.
+        // We start ClashService directly (not TunService) to avoid triggering a VPN
+        // permission dialog on auto-start; the user can explicitly tap Start for VPN mode.
+        if (!clashRunning && StatusProvider.shouldStartClashOnBoot) {
+            startForegroundServiceCompat(ClashService::class.intent)
+        }
+
         val design = MainDesign(this)
 
         setContentDesign(design)
@@ -41,6 +58,11 @@ class MainActivity : BaseActivity<MainDesign>() {
 
         val ticker = ticker(TimeUnit.SECONDS.toMillis(1))
 
+        // Jobs for cancellable background operations. Child coroutines are automatically
+        // cancelled when this activity's MainScope is cancelled (onDestroy).
+        var fetchJob: Job? = null
+        var trafficJob: Job? = null
+
         while (isActive) {
             select<Unit> {
                 events.onReceive {
@@ -48,17 +70,35 @@ class MainActivity : BaseActivity<MainDesign>() {
                         Event.ActivityStart,
                         Event.ServiceRecreated,
                         Event.ClashStop, Event.ClashStart,
-                        Event.ProfileLoaded, Event.ProfileChanged -> design.fetch()
+                        Event.ProfileLoaded, Event.ProfileChanged -> {
+                            // Launch in background so the select loop can immediately process
+                            // the next event (e.g. button taps) without waiting for HTTP calls.
+                            fetchJob?.cancel()
+                            fetchJob = launch { design.fetch() }
+                        }
                         else -> Unit
                     }
                 }
                 design.requests.onReceive {
                     when (it) {
                         MainDesign.Request.ToggleStatus -> {
-                            if (clashRunning)
+                            if (clashRunning) {
                                 stopClashService()
-                            else
-                                design.startClash()
+                                // Give immediate visual feedback: the actual ACTION_CLASH_STOPPED
+                                // broadcast only arrives after MetaKernelController.stop() finishes
+                                // killing the mihomo process (root shell, may take several seconds).
+                                fetchJob?.cancel()
+                                fetchJob = launch { design.setClashRunning(false) }
+                            } else {
+                                launch {
+                                    design.startClash()
+                                    // After startClash() returns (VPN permission granted, service
+                                    // requested), trigger a fetch so the button reflects the new
+                                    // state without waiting for the next ticker tick.
+                                    fetchJob?.cancel()
+                                    fetchJob = launch { design.fetch() }
+                                }
+                            }
                         }
                         MainDesign.Request.OpenProxy ->
                             startActivity(ProxyActivity::class.intent)
@@ -78,12 +118,16 @@ class MainActivity : BaseActivity<MainDesign>() {
                         MainDesign.Request.OpenHelp ->
                             startActivity(HelpActivity::class.intent)
                         MainDesign.Request.OpenAbout ->
-                            design.showAbout(queryAppVersionName())
+                            launch { design.showAbout(queryAppVersionName()) }
                     }
                 }
                 if (clashRunning) {
                     ticker.onReceive {
-                        design.fetchTraffic()
+                        // Skip this tick if a traffic fetch is already in flight so we
+                        // don't accumulate blocked IO threads when the API is slow.
+                        if (trafficJob?.isActive != true) {
+                            trafficJob = launch { design.fetchTraffic() }
+                        }
                     }
                 }
             }
@@ -117,8 +161,10 @@ class MainActivity : BaseActivity<MainDesign>() {
     }
 
     private suspend fun MainDesign.fetchTraffic() {
-        withClash {
-            setForwarded(queryTrafficTotal())
+        withTimeoutOrNull(3_000) {
+            withClash {
+                setForwarded(queryTrafficTotal())
+            }
         }
     }
 

@@ -21,11 +21,29 @@ internal object MetaState {
     private var logChannel: Channel<LogMessage>? = null
     private var logSocket: WebSocket? = null
 
+    /** Throws if the API is not reachable or not yet ready. Used for startup polling. */
+    fun pingApi() {
+        MetaApiClient.queryTunnelState()
+    }
+
     fun refreshSnapshot() {
         runCatching { tunnelState.set(MetaApiClient.queryTunnelState()) }
-        runCatching { nowTraffic.set(MetaApiClient.queryTrafficNow()) }
-        runCatching { totalTraffic.set(MetaApiClient.queryTrafficTotal()) }
+        // queryTrafficNow and queryTrafficTotal return identical data; one HTTP call suffices.
+        runCatching {
+            val traffic = MetaApiClient.queryTrafficNow()
+            nowTraffic.set(traffic)
+            totalTraffic.set(traffic)
+        }
         runCatching { providers.set(MetaApiClient.queryProviders()) }
+    }
+
+    /** Lightweight refresh that only fetches current traffic speed. */
+    fun refreshTraffic() {
+        runCatching {
+            val traffic = MetaApiClient.queryTrafficNow()
+            nowTraffic.set(traffic)
+            totalTraffic.set(traffic)
+        }
     }
 
     fun queryTunnelState(): TunnelState = tunnelState.get()

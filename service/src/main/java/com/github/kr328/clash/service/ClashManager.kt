@@ -21,12 +21,10 @@ class ClashManager(private val context: Context) : IClashManager,
     private var logReceiver: ReceiveChannel<LogMessage>? = null
 
     override fun queryTunnelState(): TunnelState {
-        MetaState.refreshSnapshot()
         return MetaState.queryTunnelState()
     }
 
     override fun queryTrafficTotal(): Long {
-        MetaState.refreshSnapshot()
         return MetaState.queryTrafficTotal()
     }
 
@@ -43,7 +41,6 @@ class ClashManager(private val context: Context) : IClashManager,
     }
 
     override fun queryProviders(): ProviderList {
-        MetaState.refreshSnapshot()
         return MetaState.queryProviders()
     }
 
