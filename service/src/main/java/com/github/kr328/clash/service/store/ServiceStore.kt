@@ -113,7 +113,7 @@ class ServiceStore(context: Context) {
 
     var tunExcludeInterfaces by store.string(
         key = "tun_exclude_interfaces",
-        defaultValue = "ap0,wlan1,softap0,rndis0"
+        defaultValue = "ap0,wlan1,wlan2,softap0,rndis0"
     )
 
     var dynamicNotification by store.boolean(
