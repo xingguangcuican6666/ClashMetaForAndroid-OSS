@@ -231,9 +231,9 @@ internal object MetaConfigPatcher {
             override.tcpConcurrent?.let { appendLine("tcp-concurrent: $it") }
             override.findProcessMode?.let { appendLine("find-process-mode: ${it.name.lowercase()}") }
             appendLine("tun:")
-            appendLine("  enable: true")
-            appendLine("  auto-route: false")
-            appendLine("  auto-detect-interface: false")
+            appendLine("  enable: $useTun")
+            appendLine("  auto-route: $useTun")
+            appendLine("  auto-detect-interface: $useTun")
             appendLine("# ===== end cmfa managed block =====")
         }
     }
