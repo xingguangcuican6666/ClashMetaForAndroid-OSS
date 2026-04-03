@@ -20,22 +20,22 @@ internal object MetaConfigPatcher {
         val merged = mergeOverrides(persist, session)
         val managed = buildManagedBlock(merged, useTun)
 
-        // Read the module-managed core config.
-        // The app never merges proxy/DNS/rules content from the imported profile into
-        // this config — the imported profile is written to PROFILE_CONFIG_PATH separately
-        // (see MetaKernelController) so the core config can reference it via
-        //   proxy-providers:
-        //     app-imported:
-        //       type: file
-        //       path: ./app-profile.yaml
-        // without any app-side YAML merging.
-        val catResult = RootCmd.run("cat ${MetaPaths.BASE_CONFIG_PATH} 2>/dev/null", 10)
-        val coreConfig = if (catResult.code == 0 && catResult.stdout.isNotBlank()) {
-            catResult.stdout
+        // Prefer the imported subscription profile as the base config: it contains the
+        // user's proxies, proxy-groups, DNS, and rules.  Without this, the user would
+        // see an empty proxy list because BASE_CONFIG_PATH is the module's minimal
+        // default (mixed-port / allow-lan / mode / log-level only).
+        // Fall back to BASE_CONFIG_PATH when no subscription has been imported yet.
+        val profileResult = RootCmd.run("cat ${MetaPaths.PROFILE_CONFIG_PATH} 2>/dev/null", 10)
+        val coreConfig = if (profileResult.code == 0 && profileResult.stdout.isNotBlank()) {
+            profileResult.stdout
         } else {
-            // No core config backup yet — start with the managed block only.
-            // This happens on the very first run before the backup is created.
-            return managed
+            val catResult = RootCmd.run("cat ${MetaPaths.BASE_CONFIG_PATH} 2>/dev/null", 10)
+            if (catResult.code == 0 && catResult.stdout.isNotBlank()) {
+                catResult.stdout
+            } else {
+                // Neither profile nor base config available yet (very first run).
+                return managed
+            }
         }
 
         // 1. Strip the entire cmfa managed block region (comment markers + all content

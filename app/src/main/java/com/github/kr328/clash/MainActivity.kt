@@ -17,6 +17,9 @@ import com.github.kr328.clash.util.startClashService
 import com.github.kr328.clash.util.stopClashService
 import com.github.kr328.clash.util.withClash
 import com.github.kr328.clash.util.withProfile
+import com.github.kr328.clash.service.StatusProvider
+import com.github.kr328.clash.common.compat.startForegroundServiceCompat
+import com.github.kr328.clash.service.ClashService
 import com.github.kr328.clash.core.bridge.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -31,6 +34,17 @@ class MainActivity : BaseActivity<MainDesign>() {
             startActivity(ModuleDisconnectedActivity::class.intent)
             finish()
             return
+        }
+
+        // Auto-start: if the user previously started the service (shouldStartClashOnBoot)
+        // but it isn't currently managing mihomo (clashRunning = false, which happens when
+        // the module's service.sh started mihomo at boot before ClashService was running),
+        // silently take over management.  Because prepareAndStart now sends SIGHUP instead
+        // of killing mihomo, this is non-disruptive to existing connections.
+        // We start ClashService directly (not TunService) to avoid triggering a VPN
+        // permission dialog on auto-start; the user can explicitly tap Start for VPN mode.
+        if (!clashRunning && StatusProvider.shouldStartClashOnBoot) {
+            startForegroundServiceCompat(ClashService::class.intent)
         }
 
         val design = MainDesign(this)

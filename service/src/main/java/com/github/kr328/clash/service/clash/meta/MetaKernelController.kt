@@ -20,16 +20,10 @@ internal object MetaKernelController {
             10
         )
 
-        // Write the imported profile to PROFILE_CONFIG_PATH so the module's core config
-        // can reference it via proxy-providers without any app-side YAML merging:
-        //
-        //   proxy-providers:
-        //     app-imported:
-        //       type: file
-        //       path: ./app-profile.yaml
-        //       health-check: { enable: true, url: "https://www.gstatic.com/generate_204", interval: 300 }
-        //
-        // The app never injects proxy sections into the core config.
+        // Write the imported profile to PROFILE_CONFIG_PATH.
+        // buildRuntimeConfig() uses this as the base for config.yaml so that the
+        // user's proxies, proxy-groups, DNS, and rules are preserved.  If no profile
+        // has been imported yet, buildRuntimeConfig() falls back to BASE_CONFIG_PATH.
         val profileYaml = runCatching { profileDir.resolve("config.yaml").readText() }.getOrElse { "" }
         if (profileYaml.isNotBlank()) {
             val delimiter = "__CMFA_PROFILE_EOF_${System.currentTimeMillis()}__"
@@ -55,37 +49,41 @@ internal object MetaKernelController {
             return "Prepare run dir failed"
         }
 
-        val stopOld = RootCmd.run(
-            """
-            if [ -f ${MetaPaths.PID_PATH} ]; then
-              old_pid=$(cat ${MetaPaths.PID_PATH})
-              if kill -0 "${'$'}old_pid" 2>/dev/null; then
-                kill "${'$'}old_pid"
-                poll_attempts=0
-                while kill -0 "${'$'}old_pid" 2>/dev/null && [ "${'$'}poll_attempts" -lt 30 ]; do
-                  sleep 0.1
-                  poll_attempts=$((poll_attempts+1))
-                done
-              fi
-              rm -f ${MetaPaths.PID_PATH}
-            fi
-            """.trimIndent(),
-            10
-        )
-        if (stopOld.code != 0) {
-            Log.w("Stop old mihomo failed: ${stopOld.stderr}")
+        // If mihomo is already running (e.g., started by service.sh at boot), reload
+        // the freshly-written config via SIGHUP instead of killing and restarting.
+        // This avoids dropping existing proxy connections when the app service starts
+        // or when a profile/override change triggers a reconfigure.
+        // Fall through to a fresh start if mihomo isn't running or SIGHUP fails.
+        val alreadyRunning = RootCmd.run(
+            "[ -f ${MetaPaths.PID_PATH} ] && kill -0 \"\$(cat ${MetaPaths.PID_PATH})\" 2>/dev/null && echo 1 || echo 0",
+            5
+        ).stdout.trim() == "1"
+
+        val needsFreshStart = if (alreadyRunning) {
+            val reload = RootCmd.run("kill -HUP \"\$(cat ${MetaPaths.PID_PATH})\"", 5)
+            if (reload.code != 0) {
+                Log.w("SIGHUP reload failed (${reload.stderr}), will restart")
+                true
+            } else {
+                false
+            }
+        } else {
+            true
         }
 
-        val result = RootCmd.run(
-            """
-            nohup ${MetaPaths.BIN_PATH} -d ${MetaPaths.RUN_DIR} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 &
-            echo $! > ${MetaPaths.PID_PATH}
-            """.trimIndent(),
-            15
-        )
-        if (result.code != 0) {
-            Log.w("Start mihomo failed: ${result.stderr}")
-            return "Start mihomo failed: ${result.stderr.ifBlank { "exit ${result.code}" }}"
+        if (needsFreshStart) {
+            RootCmd.run("rm -f ${MetaPaths.PID_PATH}", 5)
+            val result = RootCmd.run(
+                """
+                nohup ${MetaPaths.BIN_PATH} -d ${MetaPaths.RUN_DIR} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 &
+                echo $! > ${MetaPaths.PID_PATH}
+                """.trimIndent(),
+                15
+            )
+            if (result.code != 0) {
+                Log.w("Start mihomo failed: ${result.stderr}")
+                return "Start mihomo failed: ${result.stderr.ifBlank { "exit ${result.code}" }}"
+            }
         }
         return null
     }
