@@ -38,11 +38,19 @@ internal object MetaConfigPatcher {
             return managed
         }
 
-        // Strip any top-level keys that the managed block will define.
-        // This is the sole cause of the "mapping key already defined" YAML fatal error:
-        // the module's config.yaml already declares external-controller / tun / etc.
-        // and appending the managed block re-declares the same keys.
-        val stripped = stripTopLevelKeys(coreConfig, managedBlockKeys(merged))
+        // 1. Strip the entire cmfa managed block region (comment markers + all content
+        //    between them).  The BASE_CONFIG_PATH backup is taken from config.yaml
+        //    AFTER service.sh has already injected its own managed block, so the region
+        //    is present in the base.  stripTopLevelKeys() only removes key:value lines
+        //    and leaves comment lines in place, which would leave behind the marker
+        //    comments and result in TWO managed-block marker pairs in the final
+        //    config.yaml.  service.sh counts the markers and refuses to re-inject
+        //    when start_count > 1 → "[cmfa] failed to inject managed controller block".
+        // 2. Strip any remaining individual key definitions that the managed block will
+        //    redefine (handles hand-edited configs that declare the same keys outside
+        //    the block).
+        val withoutBlock = stripManagedBlockRegion(coreConfig)
+        val stripped = stripTopLevelKeys(withoutBlock, managedBlockKeys(merged))
         return stripped.trimEnd() + "\n\n" + managed
     }
 
@@ -69,6 +77,34 @@ internal object MetaConfigPatcher {
         if (override.tcpConcurrent != null)   keys += "tcp-concurrent"
         if (override.findProcessMode != null) keys += "find-process-mode"
         return keys
+    }
+
+    /**
+     * Removes the entire `# ===== cmfa managed block =====` … `# ===== end cmfa managed
+     * block =====` region from [yaml], including the marker comment lines themselves and
+     * all lines between them.
+     *
+     * This is necessary because [BASE_CONFIG_PATH] is created by copying config.yaml
+     * AFTER service.sh has already injected its own managed block.  Without this step,
+     * [stripTopLevelKeys] would remove the inner key:value lines but leave the comment
+     * markers behind, causing the final config.yaml to have two managed-block marker
+     * pairs — which makes service.sh's `start_count > 1` guard reject the file.
+     */
+    private fun stripManagedBlockRegion(yaml: String): String {
+        val sb = StringBuilder()
+        var skipping = false
+        for (line in yaml.lines()) {
+            if (line.trimEnd() == "# ===== cmfa managed block =====") {
+                skipping = true
+                continue
+            }
+            if (line.trimEnd() == "# ===== end cmfa managed block =====") {
+                skipping = false
+                continue
+            }
+            if (!skipping) sb.appendLine(line)
+        }
+        return sb.toString().trimEnd()
     }
 
     /**
