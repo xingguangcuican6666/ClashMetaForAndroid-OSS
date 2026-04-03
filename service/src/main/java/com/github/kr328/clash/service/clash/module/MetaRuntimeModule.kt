@@ -50,7 +50,15 @@ class MetaRuntimeModule(
             return false
         }
 
-        delay(800)
+        // Wait until mihomo's REST API is ready rather than using a fixed delay.
+        // After SIGHUP the API server stays up but may be momentarily busy reloading;
+        // after a fresh start it takes some time for the port to appear.
+        // Poll every 200ms for up to 5 seconds, stopping as soon as /configs replies.
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (System.currentTimeMillis() < deadline) {
+            if (runCatching { MetaState.pingApi() }.isSuccess) break
+            delay(200)
+        }
         MetaState.refreshSnapshot()
 
         val activeUuid = ServiceStore(service).activeProfile

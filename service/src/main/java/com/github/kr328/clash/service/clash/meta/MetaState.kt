@@ -21,6 +21,11 @@ internal object MetaState {
     private var logChannel: Channel<LogMessage>? = null
     private var logSocket: WebSocket? = null
 
+    /** Throws if the API is not reachable or not yet ready. Used for startup polling. */
+    fun pingApi() {
+        MetaApiClient.queryTunnelState()
+    }
+
     fun refreshSnapshot() {
         runCatching { tunnelState.set(MetaApiClient.queryTunnelState()) }
         runCatching { nowTraffic.set(MetaApiClient.queryTrafficNow()) }

@@ -49,15 +49,41 @@ internal object MetaKernelController {
             return "Prepare run dir failed"
         }
 
-        // If mihomo is already running (e.g., started by service.sh at boot), reload
-        // the freshly-written config via SIGHUP instead of killing and restarting.
-        // This avoids dropping existing proxy connections when the app service starts
-        // or when a profile/override change triggers a reconfigure.
-        // Fall through to a fresh start if mihomo isn't running or SIGHUP fails.
-        val alreadyRunning = RootCmd.run(
-            "[ -f ${MetaPaths.PID_PATH} ] && kill -0 \"\$(cat ${MetaPaths.PID_PATH})\" 2>/dev/null && echo 1 || echo 0",
-            5
-        ).stdout.trim() == "1"
+        // Detect any running mihomo process.  The module's service.sh does NOT write to
+        // our PID_PATH, so a PID-file-only check would always miss the module-started
+        // process, causing the app to attempt a fresh start while mihomo is already
+        // listening on port 16756.  That port conflict means the old process survives
+        // with the module's original secret, making every API call return 401 (silently
+        // deserialized as empty collections → "no proxy groups").
+        // Strategy: check our PID file first (fastest), then fall back to searching by
+        // the process name via pidof (available on Android ≥7 via toybox), then scan
+        // /proc as a last resort.  Whichever PID is found is written back to PID_PATH so
+        // subsequent calls use the fast path.
+        val findPid = RootCmd.run(
+            """
+            pid=""
+            if [ -f ${MetaPaths.PID_PATH} ]; then
+              p=$(cat ${MetaPaths.PID_PATH} 2>/dev/null)
+              kill -0 "${'$'}p" 2>/dev/null && pid="${'$'}p"
+            fi
+            if [ -z "${'$'}pid" ]; then
+              pid=$(pidof mihomo-android 2>/dev/null | awk '{print ${'$'}1}')
+            fi
+            if [ -z "${'$'}pid" ]; then
+              for d in /proc/[0-9]*; do
+                [ -r "${'$'}d/cmdline" ] && grep -qa 'mihomo-android' "${'$'}d/cmdline" 2>/dev/null && pid="${'$'}{d##*/}" && break
+              done
+            fi
+            if [ -n "${'$'}pid" ] && kill -0 "${'$'}pid" 2>/dev/null; then
+              printf '%s' "${'$'}pid" > ${MetaPaths.PID_PATH}
+              echo "1"
+            else
+              echo "0"
+            fi
+            """.trimIndent(),
+            10
+        )
+        val alreadyRunning = findPid.stdout.trim() == "1"
 
         val needsFreshStart = if (alreadyRunning) {
             val reload = RootCmd.run("kill -HUP \"\$(cat ${MetaPaths.PID_PATH})\"", 5)
@@ -72,7 +98,19 @@ internal object MetaKernelController {
         }
 
         if (needsFreshStart) {
-            RootCmd.run("rm -f ${MetaPaths.PID_PATH}", 5)
+            // Kill any stale mihomo process before starting a new one.
+            RootCmd.run(
+                """
+                if [ -f ${MetaPaths.PID_PATH} ]; then
+                  kill "\$(cat ${MetaPaths.PID_PATH})" 2>/dev/null; true
+                fi
+                p=\$(pidof mihomo-android 2>/dev/null | awk '{print \$1}')
+                [ -n "\$p" ] && kill "\$p" 2>/dev/null; true
+                sleep 0.3
+                rm -f ${MetaPaths.PID_PATH}
+                """.trimIndent(),
+                10
+            )
             val result = RootCmd.run(
                 """
                 nohup ${MetaPaths.BIN_PATH} -d ${MetaPaths.RUN_DIR} -f ${MetaPaths.CONFIG_PATH} > ${MetaPaths.LOG_PATH} 2>&1 &

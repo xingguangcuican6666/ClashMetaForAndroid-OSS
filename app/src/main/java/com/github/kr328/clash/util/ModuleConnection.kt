@@ -13,9 +13,18 @@ object ModuleConnection {
     private const val CONNECT_TIMEOUT_MS = 3000
     // Abstract Unix socket relay created by the Zygisk companion (matches RELAY_ABSTRACT in main.cpp)
     private const val RELAY_ABSTRACT_NAME = "mihomo_cmfa_relay"
+    // Module directory that exists whenever the Magisk/KernelSU module is installed
+    private const val MODULE_DIR = "/data/adb/modules/mihomo"
 
     suspend fun isAvailable(): Boolean = withContext(Dispatchers.IO) {
-        canReachControllerTCP() || canReachControllerRelay()
+        // 1. Fastest: direct TCP connection to mihomo's REST API port.
+        // 2. Fallback: abstract Unix socket relay kept by the Zygisk companion.
+        // 3. Last resort: check whether the module binary directory is present via a
+        //    root shell.  This returns true even when mihomo itself has been stopped
+        //    (e.g., killed by the app service's onDestroy), preventing a false
+        //    "Module not loaded" screen when the module is still installed and the app
+        //    should simply start a fresh mihomo process.
+        canReachControllerTCP() || canReachControllerRelay() || isModuleInstalled()
     }
 
     /**
@@ -47,6 +56,26 @@ object ModuleConnection {
                 )
                 true
             }
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Check whether the Magisk/KernelSU module directory is present using a root
+     * shell command.  This succeeds even after mihomo has been stopped, so that the
+     * app can distinguish "module not installed" (show disconnect screen) from
+     * "module installed but mihomo not running" (auto-start mihomo).
+     *
+     * A 2-second timeout prevents startup hangs if su is not pre-authorised.
+     */
+    private fun isModuleInstalled(): Boolean {
+        return runCatching {
+            val proc = ProcessBuilder("su", "-c",
+                "[ -d $MODULE_DIR ] && echo 1 || echo 0")
+                .redirectErrorStream(true)
+                .start()
+            val finished = proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            if (!finished) { proc.destroyForcibly(); return@runCatching false }
+            proc.inputStream.bufferedReader().readLine()?.trim() == "1"
         }.getOrDefault(false)
     }
 }
