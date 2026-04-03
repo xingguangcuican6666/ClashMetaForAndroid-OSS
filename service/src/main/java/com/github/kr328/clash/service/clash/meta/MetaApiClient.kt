@@ -66,9 +66,10 @@ internal object MetaApiClient {
         val all = get<ProxiesResp>("/proxies").proxies
         return all.entries
             .filter { it.key != "GLOBAL" }
+            .filter { isGroupType(it.value.type) }
             .filter {
                 if (!excludeNotSelectable) true
-                else isGroupType(it.value.type)
+                else it.value.type.lowercase() == "selector"
             }
             .map { it.key }
             .sorted()
