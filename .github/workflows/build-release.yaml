@@ -139,22 +139,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build Changelog
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@v4.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          toTag: ${{ inputs.release-tag }}
+          configurationJson: |
+            {
+              "ignore_labels": [
+                "Update"
+              ]
+            }
+
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         if: ${{ success() }}
         with:
           tag_name: ${{ inputs.release-tag }}
+          name: ${{ inputs.release-tag }}
+          body: ${{ steps.build_changelog.outputs.changelog }}
           files: |
             app/build/outputs/apk/meta/release/*
             mihomo-magisk-module.zip
-          generate_release_notes: true
-
-      - name: Release Changelog Builder
-        uses: mikepenz/release-changelog-builder-action@v4.1.1
-        with:
-          configurationJson: |
-            {
-              "ignore_labels": [
-                "Update"
-              ],
-            }
