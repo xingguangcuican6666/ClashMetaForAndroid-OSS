@@ -111,6 +111,11 @@ class ServiceStore(context: Context) {
         defaultValue = "1.1.1.1,8.8.4.4"
     )
 
+    var tunExcludeInterfaces by store.string(
+        key = "tun_exclude_interfaces",
+        defaultValue = "ap0,wlan1,softap0,rndis0"
+    )
+
     var dynamicNotification by store.boolean(
         key = "dynamic_notification",
         defaultValue = true

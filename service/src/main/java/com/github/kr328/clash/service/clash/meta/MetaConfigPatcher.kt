@@ -229,6 +229,16 @@ internal object MetaConfigPatcher {
             appendLine("  auto-route: ${store.tunAutoRoute}")
             appendLine("  auto-detect-interface: ${store.tunAutoDetectInterface}")
             appendLine("  strict-route: ${store.tunStrictRoute}")
+            val excludeInterfaces = store.tunExcludeInterfaces
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (excludeInterfaces.isNotEmpty()) {
+                appendLine("  exclude-interface:")
+                for (iface in excludeInterfaces) {
+                    appendLine("    - $iface")
+                }
+            }
             val hijackEntries = store.tunDnsHijackList
                 .split(",")
                 .map { it.trim() }

@@ -46,8 +46,16 @@ internal object MetaApiClient {
     }
 
     fun queryTrafficNow(): Traffic {
-        val t = get<TrafficResp>("/traffic")
-        return encodeTraffic(t.up, t.down)
+        // /traffic is a streaming newline-delimited JSON endpoint in mihomo.
+        // Using resp.body?.string() waits for the stream to close (never), blocking forever.
+        // Read only the first line (one traffic sample) and close immediately.
+        val req = Request.Builder().url(api("/traffic")).get().build()
+        http.newCall(req).execute().use { resp ->
+            val line = resp.body?.source()?.readUtf8Line().orEmpty()
+            val t = runCatching { json.decodeFromString(TrafficResp.serializer(), line) }
+                .getOrElse { TrafficResp() }
+            return encodeTraffic(t.up, t.down)
+        }
     }
 
     fun queryTrafficTotal(): Traffic {

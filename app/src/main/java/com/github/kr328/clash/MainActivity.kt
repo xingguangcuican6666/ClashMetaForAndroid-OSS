@@ -22,7 +22,9 @@ import com.github.kr328.clash.common.compat.startForegroundServiceCompat
 import com.github.kr328.clash.service.ClashService
 import com.github.kr328.clash.core.bridge.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
@@ -56,6 +58,11 @@ class MainActivity : BaseActivity<MainDesign>() {
 
         val ticker = ticker(TimeUnit.SECONDS.toMillis(1))
 
+        // Jobs for cancellable background operations. Child coroutines are automatically
+        // cancelled when this activity's MainScope is cancelled (onDestroy).
+        var fetchJob: Job? = null
+        var trafficJob: Job? = null
+
         while (isActive) {
             select<Unit> {
                 events.onReceive {
@@ -63,7 +70,12 @@ class MainActivity : BaseActivity<MainDesign>() {
                         Event.ActivityStart,
                         Event.ServiceRecreated,
                         Event.ClashStop, Event.ClashStart,
-                        Event.ProfileLoaded, Event.ProfileChanged -> design.fetch()
+                        Event.ProfileLoaded, Event.ProfileChanged -> {
+                            // Launch in background so the select loop can immediately process
+                            // the next event (e.g. button taps) without waiting for HTTP calls.
+                            fetchJob?.cancel()
+                            fetchJob = launch { design.fetch() }
+                        }
                         else -> Unit
                     }
                 }
@@ -73,7 +85,7 @@ class MainActivity : BaseActivity<MainDesign>() {
                             if (clashRunning)
                                 stopClashService()
                             else
-                                design.startClash()
+                                launch { design.startClash() }
                         }
                         MainDesign.Request.OpenProxy ->
                             startActivity(ProxyActivity::class.intent)
@@ -93,12 +105,16 @@ class MainActivity : BaseActivity<MainDesign>() {
                         MainDesign.Request.OpenHelp ->
                             startActivity(HelpActivity::class.intent)
                         MainDesign.Request.OpenAbout ->
-                            design.showAbout(queryAppVersionName())
+                            launch { design.showAbout(queryAppVersionName()) }
                     }
                 }
                 if (clashRunning) {
                     ticker.onReceive {
-                        design.fetchTraffic()
+                        // Skip this tick if a traffic fetch is already in flight so we
+                        // don't accumulate blocked IO threads when the API is slow.
+                        if (trafficJob?.isActive != true) {
+                            trafficJob = launch { design.fetchTraffic() }
+                        }
                     }
                 }
             }

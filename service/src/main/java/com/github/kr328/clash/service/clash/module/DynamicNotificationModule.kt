@@ -44,7 +44,8 @@ class DynamicNotificationModule(service: Service) : Module<Unit>(service) {
     private val notificationManager = NotificationManagerCompat.from(service)
 
     private fun update() {
-        MetaState.refreshSnapshot()
+        // Only refresh traffic for the notification — no need to refresh tunnel state or providers.
+        MetaState.refreshTraffic()
         val now = MetaState.queryTrafficNow()
         val total = MetaState.queryTrafficTotal()
 

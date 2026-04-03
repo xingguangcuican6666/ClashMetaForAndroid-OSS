@@ -21,13 +21,13 @@ class ClashManager(private val context: Context) : IClashManager,
     private var logReceiver: ReceiveChannel<LogMessage>? = null
 
     override fun queryTunnelState(): TunnelState {
-        MetaState.refreshSnapshot()
-        return MetaState.queryTunnelState()
+        // Direct API call — no full refreshSnapshot() which would trigger 3+ HTTP calls.
+        return MetaApiClient.queryTunnelState()
     }
 
     override fun queryTrafficTotal(): Long {
-        MetaState.refreshSnapshot()
-        return MetaState.queryTrafficTotal()
+        // Direct traffic call — /traffic is a streaming endpoint; MetaState caches the result.
+        return MetaApiClient.queryTrafficNow()
     }
 
     override fun queryProxyGroupNames(excludeNotSelectable: Boolean): List<String> {
@@ -43,8 +43,8 @@ class ClashManager(private val context: Context) : IClashManager,
     }
 
     override fun queryProviders(): ProviderList {
-        MetaState.refreshSnapshot()
-        return MetaState.queryProviders()
+        // Direct API call — skip full refreshSnapshot() to avoid extra HTTP calls.
+        return ProviderList(MetaApiClient.queryProviders())
     }
 
     override fun queryOverride(slot: Clash.OverrideSlot): ConfigurationOverride {

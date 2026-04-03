@@ -269,6 +269,8 @@
     <string name="tun_dns_fake_ip_range_summary">CIDR for fake-IP pool, e.g. 198.18.0.1/16</string>
     <string name="tun_dns_fallback">Fallback Nameservers</string>
     <string name="tun_dns_fallback_summary">Comma-separated IPs, e.g. 1.1.1.1,8.8.4.4</string>
+    <string name="tun_exclude_interfaces">Exclude Interfaces (Hotspot)</string>
+    <string name="tun_exclude_interfaces_summary">Comma-separated interfaces to bypass TUN (e.g. ap0,wlan1,softap0). Allows mobile hotspot clients to access the internet.</string>
 
     <string name="allow_all_apps">Allow all apps</string>
     <string name="allow_selected_apps">Allow selected apps</string>

@@ -192,6 +192,14 @@ class NetworkSettingsDesign(
                 configure = vpnDependencies::add,
             )
 
+            editableText(
+                value = srvStore::tunExcludeInterfaces,
+                adapter = NullableTextAdapter.NonNullString,
+                title = R.string.tun_exclude_interfaces,
+                empty = R.string.tun_exclude_interfaces_summary,
+                configure = vpnDependencies::add,
+            )
+
             selectableList(
                 value = srvStore::accessControlMode,
                 values = AccessControlMode.values(),
