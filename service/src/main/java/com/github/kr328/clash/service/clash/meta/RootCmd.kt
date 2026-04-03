@@ -23,38 +23,57 @@ internal object RootCmd {
             .redirectErrorStream(false)
             .start()
 
-        // Write in a daemon thread so the main thread can concurrently drain stdout/stderr,
-        // avoiding a pipe-buffer deadlock when the command produces output.
+        // Write command to stdin in a separate thread so that stdout/stderr can be
+        // drained concurrently and we never deadlock on the pipe buffer.
         Thread {
             runCatching {
                 process.outputStream.bufferedWriter().use { it.write(command) }
+            }.onFailure {
+                // Log but do not crash: the process may have already exited, which is
+                // a normal race on short commands that produce no stdin.
+                android.util.Log.w("RootCmd", "stdin write failed: ${it.message}")
             }
-        }.apply {
-            isDaemon = true
-            start()
-        }
+        }.apply { isDaemon = true; start() }
 
-        val outReader = BufferedReader(InputStreamReader(process.inputStream))
-        val errReader = BufferedReader(InputStreamReader(process.errorStream))
+        // Drain stdout and stderr concurrently. Without concurrent draining, a command
+        // that produces large output (e.g. `cat config.base.yaml`) will fill the pipe
+        // buffer and block, causing waitFor() to hang until the timeout fires.
+        val stdoutBuf = StringBuilder()
+        val stderrBuf = StringBuilder()
+
+        val stdoutThread = Thread {
+            runCatching {
+                BufferedReader(InputStreamReader(process.inputStream)).forEachLine {
+                    stdoutBuf.append(it).append('\n')
+                }
+            }
+        }.apply { isDaemon = true; start() }
+
+        val stderrThread = Thread {
+            runCatching {
+                BufferedReader(InputStreamReader(process.errorStream)).forEachLine {
+                    stderrBuf.append(it).append('\n')
+                }
+            }
+        }.apply { isDaemon = true; start() }
 
         val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+
         if (!finished) {
             process.destroyForcibly()
-            return CmdResult(
-                code = -1,
-                stdout = outReader.readTextSafe(),
-                stderr = "timeout",
-            )
         }
 
-        return CmdResult(
-            code = process.exitValue(),
-            stdout = outReader.readTextSafe(),
-            stderr = errReader.readTextSafe(),
-        )
-    }
+        // Give the reader threads a moment to flush any remaining bytes.
+        stdoutThread.join(2000)
+        stderrThread.join(2000)
 
-    private fun BufferedReader.readTextSafe(): String {
-        return runCatching { readText().trim() }.getOrDefault("")
+        val stdout = stdoutBuf.toString().trim()
+        val stderr = stderrBuf.toString().trim()
+
+        return if (finished) {
+            CmdResult(code = process.exitValue(), stdout = stdout, stderr = stderr)
+        } else {
+            CmdResult(code = -1, stdout = stdout, stderr = "timeout")
+        }
     }
 }

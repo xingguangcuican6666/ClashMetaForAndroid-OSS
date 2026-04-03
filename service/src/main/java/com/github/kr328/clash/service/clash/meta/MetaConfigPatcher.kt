@@ -15,14 +15,97 @@ internal object MetaConfigPatcher {
     }
 
     fun buildRuntimeConfig(profileDir: File, store: ServiceStore, useTun: Boolean): String {
-        val raw = profileDir.resolve("config.yaml").readText()
+        val profileYaml = profileDir.resolve("config.yaml").readText()
 
         val persist = decodeOverride(store.persistOverrideJson)
         val session = decodeOverride(store.sessionOverrideJson)
 
         val merged = mergeOverrides(persist, session)
         val managed = buildManagedBlock(merged, useTun)
+
+        // Try to read the one-time backup of the original module-managed core config.
+        // If it exists, use it as the base (provides TUN / DNS / rules / listeners) and
+        // overlay only the proxies and proxy-groups from the imported profile on top.
+        // This keeps "proxy config" and "core config" strictly separate.
+        // If no backup exists (first boot before the module wrote its own config), fall
+        // back to using the imported profile as the full config — original behaviour.
+        val raw = buildBaseWithProxies(profileYaml)
+
         return raw.trimEnd() + "\n\n" + managed
+    }
+
+    private fun buildBaseWithProxies(profileYaml: String): String {
+        val catResult = RootCmd.run("cat ${MetaPaths.BASE_CONFIG_PATH} 2>/dev/null", 10)
+        val baseYaml = if (catResult.code == 0 && catResult.stdout.isNotBlank()) {
+            catResult.stdout
+        } else {
+            // No base config yet — use the imported profile as-is (backwards compatible).
+            return profileYaml
+        }
+
+        val proxiesFromProfile = extractProxyBlocks(profileYaml)
+        if (proxiesFromProfile.isBlank()) {
+            // Profile has no proxies: use the base config unchanged.
+            return baseYaml
+        }
+
+        // Strip any proxies/proxy-groups already in the base config and replace with
+        // those from the imported profile.
+        val baseWithoutProxies = stripProxyBlocks(baseYaml)
+        return baseWithoutProxies.trimEnd() + "\n\n" + proxiesFromProfile
+    }
+
+    /**
+     * Extracts the top-level `proxies:` and `proxy-groups:` YAML blocks from [yaml].
+     *
+     * Uses a simple line-based parser: a top-level key starts at column 0 (no leading
+     * whitespace) and is not a comment.  Continuation lines are indented (or start with
+     * `-`).  This handles the overwhelming majority of real clash/mihomo subscription
+     * files without requiring a full YAML library.
+     */
+    private fun extractProxyBlocks(yaml: String): String {
+        val sb = StringBuilder()
+        var collecting = false
+
+        for (line in yaml.lines()) {
+            if (isTopLevelKey(line)) {
+                val key = line.substringBefore(':').trim()
+                collecting = key == "proxies" || key == "proxy-groups"
+            }
+            if (collecting) sb.appendLine(line)
+        }
+
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * Returns [yaml] with the top-level `proxies:` and `proxy-groups:` blocks removed.
+     * Used to clear existing proxy definitions from the base config before overlaying
+     * fresh ones from the imported profile.
+     */
+    private fun stripProxyBlocks(yaml: String): String {
+        val sb = StringBuilder()
+        var skipping = false
+
+        for (line in yaml.lines()) {
+            if (isTopLevelKey(line)) {
+                val key = line.substringBefore(':').trim()
+                skipping = key == "proxies" || key == "proxy-groups"
+            }
+            if (!skipping) sb.appendLine(line)
+        }
+
+        return sb.toString().trimEnd()
+    }
+
+    /** True when [line] begins a new top-level YAML key (column 0, not a comment). */
+    private fun isTopLevelKey(line: String): Boolean {
+        if (line.isEmpty() || line[0].isWhitespace() || line[0] == '#') return false
+        val colonIdx = line.indexOf(':')
+        if (colonIdx < 0) return false
+        // If '#' appears before ':', the colon is inside a comment — not a real key.
+        val hashIdx = line.indexOf('#')
+        return hashIdx < 0 || colonIdx < hashIdx
     }
 
     fun persistOverride(slot: Clash.OverrideSlot, configuration: ConfigurationOverride, store: ServiceStore) {

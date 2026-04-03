@@ -10,6 +10,16 @@ import android.content.Context
 internal object MetaKernelController {
     fun prepareAndStart(context: Context, profileDir: File, useTun: Boolean): String? {
         val store = ServiceStore(context)
+
+        // One-time backup: if the module-managed core config exists but has never been
+        // backed up yet, save it now before we first overwrite it.  Subsequent runs use
+        // this backup as the foundation and only overlay proxies from the imported profile.
+        RootCmd.run(
+            "[ ! -f ${MetaPaths.BASE_CONFIG_PATH} ] && [ -f ${MetaPaths.CONFIG_PATH} ] && " +
+            "cp ${MetaPaths.CONFIG_PATH} ${MetaPaths.BASE_CONFIG_PATH} || true",
+            10
+        )
+
         val runtimeConfig = MetaConfigPatcher.buildRuntimeConfig(profileDir, store, useTun)
         if (!MetaConfigPatcher.writeRuntimeConfig(runtimeConfig)) {
             return "Write runtime config failed"
