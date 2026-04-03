@@ -76,7 +76,7 @@ internal object MetaApiClient {
     }
 
     fun queryGroup(name: String, sort: ProxySort): ProxyGroup {
-        val encodedName = URLEncoder.encode(name, "UTF-8")
+        val encodedName = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
         val group = get<ProxyResp>("/proxies/$encodedName")
         val all = get<ProxiesResp>("/proxies").proxies
 
@@ -105,7 +105,7 @@ internal object MetaApiClient {
     }
 
     fun patchSelector(group: String, selected: String): Boolean {
-        val encodedName = URLEncoder.encode(group, "UTF-8")
+        val encodedName = URLEncoder.encode(group, "UTF-8").replace("+", "%20")
         val body = """{"name":"${escapeJson(selected)}"}"""
         val req = Request.Builder()
             .url(api("/proxies/$encodedName"))
@@ -115,7 +115,7 @@ internal object MetaApiClient {
     }
 
     fun healthCheck(group: String) {
-        val encodedName = URLEncoder.encode(group, "UTF-8")
+        val encodedName = URLEncoder.encode(group, "UTF-8").replace("+", "%20")
         val req = Request.Builder()
             .url(api("/proxies/$encodedName/healthcheck?url=https://www.gstatic.com/generate_204"))
             .get()
@@ -156,7 +156,7 @@ internal object MetaApiClient {
 
     fun updateProvider(type: Provider.Type, name: String) {
         val path = if (type == Provider.Type.Proxy) "/providers/proxies/" else "/providers/rules/"
-        val encodedName = URLEncoder.encode(name, "UTF-8")
+        val encodedName = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
         val req = Request.Builder()
             .url(api("$path$encodedName"))
             .put("{}".toRequestBody(plain))
