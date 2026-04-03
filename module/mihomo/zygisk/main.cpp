@@ -219,7 +219,7 @@ public:
             read(fd, &ack, 1);
             close(fd);
             if (ack == 1) {
-                LOGI("module: relay confirmed ready at %s", RELAY_SOCK_PATH);
+                LOGI("module: relay confirmed ready at @%s", RELAY_ABSTRACT);
             }
         } else {
             LOGE("module: connectCompanion() failed");
