@@ -18,10 +18,14 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import java.net.URLEncoder
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 internal object MetaApiClient {
     private val http = OkHttpClient.Builder()
         .proxy(java.net.Proxy.NO_PROXY)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
         .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val plain = "application/json; charset=utf-8".toMediaType()

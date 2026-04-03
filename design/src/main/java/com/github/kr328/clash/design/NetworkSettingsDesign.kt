@@ -148,6 +148,50 @@ class NetworkSettingsDesign(
                 configure = vpnDependencies::add,
             )
 
+            category(R.string.tun_dns_settings)
+
+            switch(
+                value = srvStore::tunDnsEnable,
+                title = R.string.tun_dns_enable,
+                summary = R.string.tun_dns_enable_summary,
+                configure = vpnDependencies::add,
+            )
+
+            selectableList(
+                value = srvStore::tunDnsMode,
+                values = arrayOf("fake-ip", "redir-host"),
+                valuesText = arrayOf(
+                    R.string.tun_dns_mode_fake_ip,
+                    R.string.tun_dns_mode_redir_host
+                ),
+                title = R.string.tun_dns_mode,
+                configure = vpnDependencies::add,
+            )
+
+            editableText(
+                value = srvStore::tunDnsNameservers,
+                adapter = NullableTextAdapter.NonNullString,
+                title = R.string.tun_dns_nameservers,
+                empty = R.string.tun_dns_nameservers_summary,
+                configure = vpnDependencies::add,
+            )
+
+            editableText(
+                value = srvStore::tunDnsFallback,
+                adapter = NullableTextAdapter.NonNullString,
+                title = R.string.tun_dns_fallback,
+                empty = R.string.tun_dns_fallback_summary,
+                configure = vpnDependencies::add,
+            )
+
+            editableText(
+                value = srvStore::tunDnsFakeIpRange,
+                adapter = NullableTextAdapter.NonNullString,
+                title = R.string.tun_dns_fake_ip_range,
+                empty = R.string.tun_dns_fake_ip_range_summary,
+                configure = vpnDependencies::add,
+            )
+
             selectableList(
                 value = srvStore::accessControlMode,
                 values = AccessControlMode.values(),

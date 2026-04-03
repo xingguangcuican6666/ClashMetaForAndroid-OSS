@@ -80,6 +80,7 @@ class MainDesign(context: Context) : Design<MainDesign.Request>(context) {
 
     init {
         binding.self = this
+        binding.forwarded = "0 Bytes"
 
         binding.colorClashStarted = context.resolveThemedColor(com.google.android.material.R.attr.colorPrimary)
         binding.colorClashStopped = context.resolveThemedColor(R.attr.colorClashStopped)

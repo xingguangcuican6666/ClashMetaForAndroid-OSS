@@ -38,19 +38,8 @@ internal object MetaConfigPatcher {
             }
         }
 
-        // 1. Strip the entire cmfa managed block region (comment markers + all content
-        //    between them).  The BASE_CONFIG_PATH backup is taken from config.yaml
-        //    AFTER service.sh has already injected its own managed block, so the region
-        //    is present in the base.  stripTopLevelKeys() only removes key:value lines
-        //    and leaves comment lines in place, which would leave behind the marker
-        //    comments and result in TWO managed-block marker pairs in the final
-        //    config.yaml.  service.sh counts the markers and refuses to re-inject
-        //    when start_count > 1 → "[cmfa] failed to inject managed controller block".
-        // 2. Strip any remaining individual key definitions that the managed block will
-        //    redefine (handles hand-edited configs that declare the same keys outside
-        //    the block).
         val withoutBlock = stripManagedBlockRegion(coreConfig)
-        val stripped = stripTopLevelKeys(withoutBlock, managedBlockKeys(merged))
+        val stripped = stripTopLevelKeys(withoutBlock, managedBlockKeys(merged, useTun))
         return stripped.trimEnd() + "\n\n" + managed
     }
 
@@ -60,11 +49,14 @@ internal object MetaConfigPatcher {
      * are included so that optional settings from the core config are preserved when
      * no app-side override is active.
      */
-    private fun managedBlockKeys(override: ConfigurationOverride): Set<String> {
+    private fun managedBlockKeys(override: ConfigurationOverride, useTun: Boolean): Set<String> {
         val keys = mutableSetOf(
             // Always written by the managed block.
             "external-controller", "external-controller-tls", "external-ui", "secret", "tun"
         )
+        // When TUN is enabled the managed block also injects a dns section so we must
+        // strip any dns block that the subscription profile already contains.
+        if (useTun) keys += "dns"
         // Conditionally written — only strip from the core config if the managed block
         // will actually set them, so the core config value is preserved otherwise.
         if (override.mode != null)            keys += "mode"
@@ -245,6 +237,30 @@ internal object MetaConfigPatcher {
                 appendLine("  dns-hijack:")
                 for (entry in hijackEntries) {
                     appendLine("    - $entry")
+                }
+            }
+            if (useTun && store.tunDnsEnable) {
+                appendLine("dns:")
+                appendLine("  enable: true")
+                appendLine("  enhanced-mode: ${store.tunDnsMode}")
+                if (store.tunDnsMode == "fake-ip") {
+                    appendLine("  fake-ip-range: ${store.tunDnsFakeIpRange}")
+                    appendLine("  fake-ip-filter:")
+                    appendLine("    - '*.lan'")
+                    appendLine("    - '*.local'")
+                    appendLine("    - 'localhost.ptlogin2.qq.com'")
+                }
+                val nameservers = store.tunDnsNameservers.split(",")
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                if (nameservers.isNotEmpty()) {
+                    appendLine("  nameserver:")
+                    for (ns in nameservers) appendLine("    - $ns")
+                }
+                val fallback = store.tunDnsFallback.split(",")
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                if (fallback.isNotEmpty()) {
+                    appendLine("  fallback:")
+                    for (fb in fallback) appendLine("    - $fb")
                 }
             }
             appendLine("# ===== end cmfa managed block =====")

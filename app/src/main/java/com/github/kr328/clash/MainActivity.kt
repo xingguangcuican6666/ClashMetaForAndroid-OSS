@@ -24,6 +24,7 @@ import com.github.kr328.clash.core.bridge.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import com.github.kr328.clash.design.R
@@ -131,8 +132,10 @@ class MainActivity : BaseActivity<MainDesign>() {
     }
 
     private suspend fun MainDesign.fetchTraffic() {
-        withClash {
-            setForwarded(queryTrafficTotal())
+        withTimeoutOrNull(3_000) {
+            withClash {
+                setForwarded(queryTrafficTotal())
+            }
         }
     }
 

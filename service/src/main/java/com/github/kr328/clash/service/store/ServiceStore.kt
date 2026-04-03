@@ -86,6 +86,31 @@ class ServiceStore(context: Context) {
         defaultValue = true
     )
 
+    var tunDnsEnable by store.boolean(
+        key = "tun_dns_enable",
+        defaultValue = true
+    )
+
+    var tunDnsMode by store.string(
+        key = "tun_dns_mode",
+        defaultValue = "fake-ip"
+    )
+
+    var tunDnsNameservers by store.string(
+        key = "tun_dns_nameservers",
+        defaultValue = "114.114.114.114,8.8.8.8"
+    )
+
+    var tunDnsFakeIpRange by store.string(
+        key = "tun_dns_fake_ip_range",
+        defaultValue = "198.18.0.1/16"
+    )
+
+    var tunDnsFallback by store.string(
+        key = "tun_dns_fallback",
+        defaultValue = "1.1.1.1,8.8.4.4"
+    )
+
     var dynamicNotification by store.boolean(
         key = "dynamic_notification",
         defaultValue = true
