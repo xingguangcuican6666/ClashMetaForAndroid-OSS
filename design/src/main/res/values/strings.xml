@@ -246,6 +246,13 @@
     <string name="tun_stack_system">System Stack</string>
     <string name="tun_stack_gvisor">Gvisor Stack</string>
     <string name="tun_stack_mixed">Mixed Stack</string>
+    <string name="tun_settings">TUN Settings</string>
+    <string name="tun_mtu">MTU</string>
+    <string name="tun_mtu_summary">Maximum Transmission Unit (default: 9000)</string>
+    <string name="tun_strict_route">Strict Route</string>
+    <string name="tun_strict_route_summary">Use strict routing rules to prevent leaks</string>
+    <string name="tun_dns_hijack">DNS Hijack List</string>
+    <string name="tun_dns_hijack_summary">Comma-separated addresses (e.g. any:53)</string>
 
     <string name="allow_all_apps">Allow all apps</string>
     <string name="allow_selected_apps">Allow selected apps</string>

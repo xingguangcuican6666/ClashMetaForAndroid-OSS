@@ -18,7 +18,7 @@ internal object MetaConfigPatcher {
         val session = decodeOverride(store.sessionOverrideJson)
 
         val merged = mergeOverrides(persist, session)
-        val managed = buildManagedBlock(merged, useTun)
+        val managed = buildManagedBlock(merged, useTun, store)
 
         // Prefer the imported subscription profile as the base config: it contains the
         // user's proxies, proxy-groups, DNS, and rules.  Without this, the user would
@@ -214,7 +214,7 @@ internal object MetaConfigPatcher {
         return p
     }
 
-    private fun buildManagedBlock(override: ConfigurationOverride, useTun: Boolean): String {
+    private fun buildManagedBlock(override: ConfigurationOverride, useTun: Boolean, store: ServiceStore): String {
         return buildString {
             appendLine("# ===== cmfa managed block =====")
             appendLine("external-controller: \"${MetaPaths.EXTERNAL_CONTROLLER}\"")
@@ -232,8 +232,21 @@ internal object MetaConfigPatcher {
             override.findProcessMode?.let { appendLine("find-process-mode: ${it.name.lowercase()}") }
             appendLine("tun:")
             appendLine("  enable: $useTun")
+            appendLine("  stack: ${store.tunStackMode}")
+            appendLine("  mtu: ${store.tunMtu}")
             appendLine("  auto-route: $useTun")
             appendLine("  auto-detect-interface: $useTun")
+            appendLine("  strict-route: ${store.tunStrictRoute}")
+            val hijackEntries = store.tunDnsHijackList
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (hijackEntries.isNotEmpty()) {
+                appendLine("  dns-hijack:")
+                for (entry in hijackEntries) {
+                    appendLine("    - $entry")
+                }
+            }
             appendLine("# ===== end cmfa managed block =====")
         }
     }

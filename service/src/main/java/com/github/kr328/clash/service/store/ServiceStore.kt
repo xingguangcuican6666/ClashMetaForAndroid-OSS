@@ -61,6 +61,21 @@ class ServiceStore(context: Context) {
         defaultValue = "system"
     )
 
+    var tunMtu by store.int(
+        key = "tun_mtu",
+        defaultValue = 9000
+    )
+
+    var tunStrictRoute by store.boolean(
+        key = "tun_strict_route",
+        defaultValue = false
+    )
+
+    var tunDnsHijackList by store.string(
+        key = "tun_dns_hijack_list",
+        defaultValue = "any:53"
+    )
+
     var dynamicNotification by store.boolean(
         key = "dynamic_notification",
         defaultValue = true

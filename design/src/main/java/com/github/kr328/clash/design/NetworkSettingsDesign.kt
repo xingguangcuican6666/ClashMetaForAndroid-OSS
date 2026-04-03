@@ -109,6 +109,31 @@ class NetworkSettingsDesign(
                 configure = vpnDependencies::add,
             )
 
+            category(R.string.tun_settings)
+
+            editableText(
+                value = srvStore::tunMtu,
+                adapter = NullableTextAdapter.TunMtu,
+                title = R.string.tun_mtu,
+                placeholder = R.string.tun_mtu_summary,
+                configure = vpnDependencies::add,
+            )
+
+            switch(
+                value = srvStore::tunStrictRoute,
+                title = R.string.tun_strict_route,
+                summary = R.string.tun_strict_route_summary,
+                configure = vpnDependencies::add,
+            )
+
+            editableText(
+                value = srvStore::tunDnsHijackList,
+                adapter = NullableTextAdapter.NonNullString,
+                title = R.string.tun_dns_hijack,
+                empty = R.string.tun_dns_hijack_summary,
+                configure = vpnDependencies::add,
+            )
+
             selectableList(
                 value = srvStore::accessControlMode,
                 values = AccessControlMode.values(),
