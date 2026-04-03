@@ -82,10 +82,23 @@ class MainActivity : BaseActivity<MainDesign>() {
                 design.requests.onReceive {
                     when (it) {
                         MainDesign.Request.ToggleStatus -> {
-                            if (clashRunning)
+                            if (clashRunning) {
                                 stopClashService()
-                            else
-                                launch { design.startClash() }
+                                // Give immediate visual feedback: the actual ACTION_CLASH_STOPPED
+                                // broadcast only arrives after MetaKernelController.stop() finishes
+                                // killing the mihomo process (root shell, may take several seconds).
+                                fetchJob?.cancel()
+                                fetchJob = launch { design.setClashRunning(false) }
+                            } else {
+                                launch {
+                                    design.startClash()
+                                    // After startClash() returns (VPN permission granted, service
+                                    // requested), trigger a fetch so the button reflects the new
+                                    // state without waiting for the next ticker tick.
+                                    fetchJob?.cancel()
+                                    fetchJob = launch { design.fetch() }
+                                }
+                            }
                         }
                         MainDesign.Request.OpenProxy ->
                             startActivity(ProxyActivity::class.intent)
